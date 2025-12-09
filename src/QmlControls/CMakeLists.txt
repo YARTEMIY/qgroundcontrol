@@ -185,6 +185,8 @@ qt_add_qml_module(QGroundControlControlsModule
         FirstRunPrompt.qml
 
         # src/PlanView/
+        AgroItemEditor.qml
+        AgroMapVisual.qml
         CameraCalcCamera.qml
         CameraCalcGrid.qml
         CameraSection.qml

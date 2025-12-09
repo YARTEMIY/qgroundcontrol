@@ -5,6 +5,10 @@
 
 target_sources(${CMAKE_PROJECT_NAME}
     PRIVATE
+        AgroComplexItem.cc
+        AgroComplexItem.h
+        AgroPlanCreator.cc
+        AgroPlanCreator.h
         BlankPlanCreator.cc
         BlankPlanCreator.h
         CameraCalc.cc
@@ -99,6 +103,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_
 #       CogWheel.svg
 #       StructureScanPlanCreator.png
 #       SurveyPlanCreator.png
+#       AgroPlanCreator.png
 #     QML_FILES
 #       MapLineArrow.qml
 #       QGCMapCircleVisuals.qml
