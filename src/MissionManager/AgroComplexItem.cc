@@ -70,17 +70,18 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
 
 void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool active)
 {
-    float turnOn = 1.0f;
-    float turnOff = -1.0f;
+    float servoInstance = 9.0f;
+    float turnOn = 1900.0f;
+    float turnOff = 1100.0f;
 
-    float actuatorValue = active ? turnOn : turnOff;
+    float pwmValue = active ? 1900.0f : 1100.0f;
 
     MissionItem* item = new MissionItem(seqNum++,
-                                        MAV_CMD_DO_SET_ACTUATOR,
+                                        MAV_CMD_DO_SET_SERVO,
                                         MAV_FRAME_MISSION,
-                                        actuatorValue,  // Param 1: Actuator 1 value
-                                        0,              // Param 2: Actuator 2
-                                        0,              // Param 3: Actuator 3
+                                        servoInstance,  // Param 1: Номер сервопривода (Instance/Channel)
+                                        pwmValue,       // Param 2: PWM (микросекунды)
+                                        0,              // Param 3: (не используется)
                                         0, 0, 0, 0,     // Param 4-7
                                         true,           // autoContinue
                                         false,          // isCurrentItem
