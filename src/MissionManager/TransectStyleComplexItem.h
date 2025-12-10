@@ -84,7 +84,7 @@ public:
     // Overrides from VisualMissionItem
     void                save                        (QJsonArray&  planItems) override = 0;
     bool                specifiesCoordinate         (void) const override = 0;
-    void                appendMissionItems          (QList<MissionItem*>& items, QObject* missionItemParent) final;
+    virtual void                appendMissionItems          (QList<MissionItem*>& items, QObject* missionItemParent);
     void                applyNewAltitude            (double newAltitude) final;
     bool                dirty                       (void) const final { return _dirty; }
     bool                isSimpleItem                (void) const final { return false; }

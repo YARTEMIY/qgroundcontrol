@@ -68,6 +68,71 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     setDirty(false);
 }
 
+void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool active)
+{
+    float turnOn = 1.0f;
+    float turnOff = -1.0f;
+
+    float actuatorValue = active ? turnOn : turnOff;
+
+    MissionItem* item = new MissionItem(seqNum++,
+                                        MAV_CMD_DO_SET_ACTUATOR,
+                                        MAV_FRAME_MISSION,
+                                        actuatorValue,  // Param 1: Actuator 1 value
+                                        0,              // Param 2: Actuator 2
+                                        0,              // Param 3: Actuator 3
+                                        0, 0, 0, 0,     // Param 4-7
+                                        true,           // autoContinue
+                                        false,          // isCurrentItem
+                                        missionItemParent);
+    items.append(item);
+}
+
+void AgroComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* missionItemParent)
+{
+    // Если миссия загружена из файла - используем родительскую логику загрузки
+    if (_loadedMissionItems.count()) {
+        TransectStyleComplexItem::appendMissionItems(items, missionItemParent);
+        return;
+    }
+
+    int seqNum = _sequenceNumber;
+    
+    // Определяем тип высоты
+    MAV_FRAME mavFrame = MAV_FRAME_GLOBAL_RELATIVE_ALT;
+    if (_cameraCalc.distanceMode() == QGroundControlQmlGlobal::AltitudeModeAbsolute ||
+        _cameraCalc.distanceMode() == QGroundControlQmlGlobal::AltitudeModeCalcAboveTerrain) {
+        mavFrame = MAV_FRAME_GLOBAL;
+    } else if (_cameraCalc.distanceMode() == QGroundControlQmlGlobal::AltitudeModeTerrainFrame) {
+        mavFrame = MAV_FRAME_GLOBAL_TERRAIN_ALT;
+    }
+
+    // Проходим по рассчитанным точкам (они доступны, т.к. protected в родителе)
+    for (int i = 0; i < _rgFlightPathCoordInfo.count(); i++) {
+        const CoordInfo_t& coordInfo = _rgFlightPathCoordInfo[i];
+
+        // Используем метод родителя для добавления точки полета
+        // (он protected, поэтому доступен нам здесь)
+        _appendWaypoint(items, missionItemParent, seqNum, mavFrame, 0, coordInfo.coord);
+
+        // Добавляем логику опрыскивателя
+        switch (coordInfo.coordType) {
+            case CoordTypeSurveyEntry:
+                // Включаем ПОСЛЕ прилета в точку входа
+                _appendSprayerCommand(items, missionItemParent, seqNum, true);
+                break;
+
+            case CoordTypeSurveyExit:
+                // Выключаем ПОСЛЕ прилета в точку выхода
+                _appendSprayerCommand(items, missionItemParent, seqNum, false);
+                break;
+                
+            default:
+                break;
+        }
+    }
+}
+
 void AgroComplexItem::save(QJsonArray&  planItems)
 {
     QJsonObject saveObject;

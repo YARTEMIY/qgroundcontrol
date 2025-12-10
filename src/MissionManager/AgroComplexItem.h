@@ -54,6 +54,7 @@ public:
     void    save                (QJsonArray&  planItems) final;
     bool    specifiesCoordinate (void) const final { return true; }
     double  timeBetweenShots    (void) final;
+    void    appendMissionItems  (QList<MissionItem*>& items, QObject* missionItemParent);
 
     // Overrides from VisualMissionionItem
     QString             commandDescription  (void) const final { return tr("Survey"); }
@@ -128,6 +129,8 @@ private:
     void _rebuildTransectsPhase1WorkerSinglePolygon(bool refly);
     /// Adds to the _transects array from one polygon
     void _rebuildTransectsFromPolygon(bool refly, const QPolygonF& polygon, const QGeoCoordinate& tangentOrigin, const QPointF* const transitionPoint);
+
+    void _appendSprayerCommand(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool active);
 
 #if 0
     // Splitting polygons is not supported since this code would get stuck in a infinite loop
