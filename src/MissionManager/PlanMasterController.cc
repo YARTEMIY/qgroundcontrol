@@ -632,11 +632,11 @@ void PlanMasterController::_updatePlanCreatorsList(void)
         }
 
         if (_managerVehicle->fixedWing()) {
-            if (_planCreators->count() == 4) {
+            if (_planCreators->count() == 5) {
                 _planCreators->removeAt(_planCreators->count() - 1);
             }
         } else {
-            if (_planCreators->count() != 4) {
+            if (_planCreators->count() != 5) {
                 _planCreators->append(new StructureScanPlanCreator(this, this));
             }
         }
