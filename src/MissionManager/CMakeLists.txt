@@ -9,6 +9,10 @@ target_sources(${CMAKE_PROJECT_NAME}
         AgroComplexItem.h
         AgroPlanCreator.cc
         AgroPlanCreator.h
+        AgricultureComplexItem.cc
+        AgrocultureComplexItem.h
+        AgroculturePlanCreator.cc
+        AgroculturePlanCreator.h
         BlankPlanCreator.cc
         BlankPlanCreator.h
         CameraCalc.cc

@@ -19,6 +19,7 @@
 #include "KMLPlanDomDocument.h"
 #include "SurveyPlanCreator.h"
 #include "AgroPlanCreator.h"
+#include "AgriculturePlanCreator.h"
 #include "StructureScanPlanCreator.h"
 #include "CorridorScanPlanCreator.h"
 #include "BlankPlanCreator.h"
@@ -628,6 +629,7 @@ void PlanMasterController::_updatePlanCreatorsList(void)
             _planCreators->append(new SurveyPlanCreator(this, this));
             _planCreators->append(new CorridorScanPlanCreator(this, this));
             _planCreators->append(new AgroPlanCreator(this, this)); 
+            _planCreators->append(new AgriculturePlanCreator(this, this)); 
             emit planCreatorsChanged(_planCreators);
         }
 

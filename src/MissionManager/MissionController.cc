@@ -16,6 +16,7 @@
 #include "SimpleMissionItem.h"
 #include "SurveyComplexItem.h"
 #include "AgroComplexItem.h"
+#include "AgricultureComplexItem.h"
 #include "FixedWingLandingComplexItem.h"
 #include "VTOLLandingComplexItem.h"
 #include "StructureScanComplexItem.h"
@@ -458,6 +459,32 @@ VisualMissionItem* MissionController::insertComplexMissionItem(QString itemName,
                 qobject_cast<AgroComplexItem*>(newItem)->cameraCalc()->setDistanceMode(prevAltMode);
             }
         }
+    }
+    else if (itemName == AgricultureComplexItem::name) {
+        newItem = new AgroComplexItem(_masterController, _flyView, QString() /* kmlOrShpFile */);
+        newItem->setCoordinate(mapCenterCoordinate);
+
+        double                              prevAltitude;
+        QGroundControlQmlGlobal::AltMode    prevAltMode;
+        if (globalAltitudeMode() == QGroundControlQmlGlobal::AltitudeModeMixed) {
+            // We are in mixed altitude modes, so copy from previous. Otherwise alt mode will be set from global setting in constructor.
+            if (_findPreviousAltitude(visualItemIndex, &prevAltitude, &prevAltMode)) {
+                qobject_cast<AgricultureComplexItem*>(newItem)->cameraCalc()->setDistanceMode(prevAltMode);
+            }
+        }
+    }
+    else if (itemName == AgricultureComplexItem::name) {
+        newItem = new AgricultureComplexItem(_masterController, _flyView, QString() /* kmlOrShpFile */);
+        newItem->setCoordinate(mapCenterCoordinate);
+
+        double                              prevAltitude;
+        QGroundControlQmlGlobal::AltMode    prevAltMode;
+        if (globalAltitudeMode() == QGroundControlQmlGlobal::AltitudeModeMixed) {
+            // We are in mixed altitude modes, so copy from previous. Otherwise alt mode will be set from global setting in constructor.
+            if (_findPreviousAltitude(visualItemIndex, &prevAltitude, &prevAltMode)) {
+                qobject_cast<AgricultureComplexItem*>(newItem)->cameraCalc()->setDistanceMode(prevAltMode);
+            }
+        }
     } else if (itemName == FixedWingLandingComplexItem::name) {
         newItem = new FixedWingLandingComplexItem(_masterController, _flyView);
     } else if (itemName == VTOLLandingComplexItem::name) {
@@ -484,6 +511,9 @@ VisualMissionItem* MissionController::insertComplexMissionItemFromKMLOrSHP(QStri
         newItem = new SurveyComplexItem(_masterController, _flyView, file);
     }else if (itemName == AgroComplexItem::name) {
         newItem = new AgroComplexItem(_masterController, _flyView, file);
+    }
+    else if (itemName == AgricultureComplexItem::name) {
+        newItem = new AgricultureComplexItem(_masterController, _flyView, file);
     } else if (itemName == StructureScanComplexItem::name) {
         newItem = new StructureScanComplexItem(_masterController, _flyView, file);
     } else if (itemName == CorridorScanComplexItem::name) {
@@ -503,6 +533,7 @@ void MissionController::_insertComplexMissionItemWorker(const QGeoCoordinate& ma
     int sequenceNumber = _nextSequenceNumber();
     bool surveyStyleItem = qobject_cast<SurveyComplexItem*>(complexItem) ||
             qobject_cast<AgroComplexItem*>(complexItem) ||
+            qobject_cast<AgricultureComplexItem*>(complexItem) ||
             qobject_cast<CorridorScanComplexItem*>(complexItem) ||
             qobject_cast<StructureScanComplexItem*>(complexItem);
 
@@ -563,7 +594,7 @@ void MissionController::removeVisualItem(int viIndex)
         return;
     }
 
-    bool removeSurveyStyle = _visualItems->value<SurveyComplexItem*>(viIndex) || _visualItems->value<AgroComplexItem*>(viIndex) || _visualItems->value<CorridorScanComplexItem*>(viIndex);
+    bool removeSurveyStyle = _visualItems->value<SurveyComplexItem*>(viIndex) || _visualItems->value<AgroComplexItem*>(viIndex) || _visualItems->value<AgricultureComplexItem*>(viIndex) || _visualItems->value<CorridorScanComplexItem*>(viIndex);
     VisualMissionItem* item = qobject_cast<VisualMissionItem*>(_visualItems->removeAt(viIndex));
 
     if (item == _takeoffMissionItem) {
@@ -577,7 +608,7 @@ void MissionController::removeVisualItem(int viIndex)
         // Determine if the mission still has another survey style item in it
         bool foundSurvey = false;
         for (int i=1; i<_visualItems->count(); i++) {
-            if (_visualItems->value<SurveyComplexItem*>(i) || _visualItems->value<AgroComplexItem*>(viIndex) || _visualItems->value<CorridorScanComplexItem*>(i)) {
+            if (_visualItems->value<SurveyComplexItem*>(i) || _visualItems->value<AgroComplexItem*>(viIndex) || _visualItems->value<AgricultureComplexItem*>(viIndex) || _visualItems->value<CorridorScanComplexItem*>(i)) {
                 foundSurvey = true;
                 break;
             }
@@ -894,6 +925,15 @@ bool MissionController::_loadJsonMissionFileV2(const QJsonObject& json, QmlObjec
             } else if (complexItemType == AgroComplexItem::jsonComplexItemTypeValue) {
                 qCDebug(MissionControllerLog) << "Loading Survey: nextSequenceNumber" << nextSequenceNumber;
                 AgroComplexItem* surveyItem = new AgroComplexItem(_masterController, _flyView, QString() /* kmlOrShpFile */);
+                if (!surveyItem->load(itemObject, nextSequenceNumber++, errorString)) {
+                    return false;
+                }
+                nextSequenceNumber = surveyItem->lastSequenceNumber() + 1;
+                qCDebug(MissionControllerLog) << "Survey load complete: nextSequenceNumber" << nextSequenceNumber;
+                visualItems->append(surveyItem);
+            } else if (complexItemType == AgrictureComplexItem::jsonComplexItemTypeValue) {
+                qCDebug(MissionControllerLog) << "Loading Survey: nextSequenceNumber" << nextSequenceNumber;
+                AgricultureComplexItem* surveyItem = new AgricutlureComplexItem(_masterController, _flyView, QString() /* kmlOrShpFile */);
                 if (!surveyItem->load(itemObject, nextSequenceNumber++, errorString)) {
                     return false;
                 }
@@ -2290,6 +2330,7 @@ QStringList MissionController::complexMissionItemNames(void) const
 
     complexItems.append(SurveyComplexItem::name);
     complexItems.append(AgroComplexItem::name);
+    complexItems.append(AgricultureComplexItem::name);
     complexItems.append(CorridorScanComplexItem::name);
     if (_controllerVehicle->multiRotor() || _controllerVehicle->vtol()) {
         complexItems.append(StructureScanComplexItem::name);
@@ -2700,6 +2741,11 @@ QString MissionController::surveyComplexItemName(void) const
 QString MissionController::agroComplexItemName(void) const
 {
     return AgroComplexItem::name;
+}
+
+QString MissionController::agricultureComplexItemName(void) const
+{
+    return AgricultureComplexItem::name;
 }
 
 QString MissionController::corridorScanComplexItemName(void) const

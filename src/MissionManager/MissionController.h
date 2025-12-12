@@ -108,6 +108,7 @@ public:
     Q_PROPERTY(QGCGeoBoundingCube*  travelBoundingCube              READ travelBoundingCube             NOTIFY missionBoundingCubeChanged)
     Q_PROPERTY(QString              surveyComplexItemName           READ surveyComplexItemName          CONSTANT)
     Q_PROPERTY(QString              agroComplexItemName             READ agroComplexItemName            CONSTANT)
+    Q_PROPERTY(QString              agricultureComplexItemName             READ agricultureComplexItemName            CONSTANT)
     Q_PROPERTY(QString              corridorScanComplexItemName     READ corridorScanComplexItemName    CONSTANT)
     Q_PROPERTY(QString              structureScanComplexItemName    READ structureScanComplexItemName   CONSTANT)
     Q_PROPERTY(bool                 onlyInsertTakeoffValid          MEMBER _onlyInsertTakeoffValid      NOTIFY onlyInsertTakeoffValidChanged)
@@ -242,6 +243,7 @@ public:
     double              progressPct                 (void) const { return _progressPct; }
     QString             surveyComplexItemName       (void) const;
     QString             agroComplexItemName         (void) const;
+    QString             agricultureComplexItemName         (void) const;
     QString             corridorScanComplexItemName (void) const;
     QString             structureScanComplexItemName(void) const;
     bool                isInsertTakeoffValid        (void) const;
