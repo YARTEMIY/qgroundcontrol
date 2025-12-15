@@ -164,9 +164,6 @@ private:
     SettingsFact    _splitConcavePolygonsFact;
     int             _entryPoint;
 
-    static constexpr const char* _jsonGridAngleKey =          "angle";
-    static constexpr const char* _jsonEntryPointKey =         "entryLocation";
-
     static constexpr const char* _jsonV3GridObjectKey =                   "grid";
     static constexpr const char* _jsonV3GridAltitudeKey =                 "altitude";
     static constexpr const char* _jsonV3GridAltitudeRelativeKey =         "relativeAltitude";
@@ -203,7 +200,6 @@ private:
     // --- ДОБАВЛЕНО: Ключ для JSON ---
     static constexpr const char* _jsonExclusionPolygonKey =   "exclusionPolygon"; 
 
-    static constexpr const char* _jsonV3GridObjectKey =                   "grid";
     // ... (остальные константы остаются без изменений) ...
     static constexpr const char* _jsonSplitConcavePolygonsKey =           "splitConcavePolygons";
 };
