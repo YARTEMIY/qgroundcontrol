@@ -89,6 +89,32 @@ void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject*
     items.append(item);
 }
 
+void AgroComplexItem::_appendVisualAction(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, MAV_FRAME frame, const QGeoCoordinate& coord)
+{
+    // === ВИЗУАЛЬНЫЙ ТЕСТ: "ПРЫЖОК" ===
+    
+    // 1. Берем текущую высоту и добавляем 10 метров
+    double jumpAltitude = coord.altitude() + 10.0;
+    
+    // 2. Время зависания в верхней точке (в секундах)
+    float holdTime = 5.0f; 
+
+    MissionItem* item = new MissionItem(seqNum++,
+                                        MAV_CMD_NAV_WAYPOINT, // Стандартная команда полета (поддерживается 100%)
+                                        frame,
+                                        holdTime,       // Param 1: Время ожидания (Hold time)
+                                        0,              // Param 2: Радиус (0 = по умолчанию)
+                                        0,              // Param 3: Pass Radius
+                                        0,              // Param 4: Yaw (0 = не менять)
+                                        coord.latitude(),  // Param 5: Та же широта
+                                        coord.longitude(), // Param 6: Та же долгота
+                                        jumpAltitude,      // Param 7: НОВАЯ ВЫСОТА (+10м)
+                                        true,           // autoContinue
+                                        false,          // isCurrentItem
+                                        missionItemParent);
+    items.append(item);
+}
+
 void AgroComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* missionItemParent)
 {
     // Если миссия загружена из файла - используем родительскую логику загрузки
@@ -121,6 +147,7 @@ void AgroComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* mi
             case CoordTypeSurveyEntry:
                 // Включаем ПОСЛЕ прилета в точку входа
                 _appendSprayerCommand(items, missionItemParent, seqNum, true);
+                // _appendVisualAction(items, missionItemParent, seqNum, mavFrame, coordInfo.coord);
                 break;
 
             case CoordTypeSurveyExit:

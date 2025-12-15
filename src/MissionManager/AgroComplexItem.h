@@ -55,6 +55,7 @@ public:
     bool    specifiesCoordinate (void) const final { return true; }
     double  timeBetweenShots    (void) final;
     void    appendMissionItems  (QList<MissionItem*>& items, QObject* missionItemParent);
+    void    _appendVisualAction(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, MAV_FRAME frame, const QGeoCoordinate& coord);
 
     // Overrides from VisualMissionionItem
     QString             commandDescription  (void) const final { return tr("Survey"); }
