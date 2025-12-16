@@ -931,9 +931,9 @@ bool MissionController::_loadJsonMissionFileV2(const QJsonObject& json, QmlObjec
                 nextSequenceNumber = surveyItem->lastSequenceNumber() + 1;
                 qCDebug(MissionControllerLog) << "Survey load complete: nextSequenceNumber" << nextSequenceNumber;
                 visualItems->append(surveyItem);
-            } else if (complexItemType == AgrictureComplexItem::jsonComplexItemTypeValue) {
+            } else if (complexItemType == AgricultureComplexItem::jsonComplexItemTypeValue) {
                 qCDebug(MissionControllerLog) << "Loading Survey: nextSequenceNumber" << nextSequenceNumber;
-                AgricultureComplexItem* surveyItem = new AgricutlureComplexItem(_masterController, _flyView, QString() /* kmlOrShpFile */);
+                AgricultureComplexItem* surveyItem = new AgricultureComplexItem(_masterController, _flyView, QString() /* kmlOrShpFile */);
                 if (!surveyItem->load(itemObject, nextSequenceNumber++, errorString)) {
                     return false;
                 }

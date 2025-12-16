@@ -61,7 +61,7 @@ AgricultureComplexItem::AgricultureComplexItem(PlanMasterController* masterContr
     connect(&_AgricultureAreaPolygon,        &QGCMapPolygon::isValidChanged,             this, &AgricultureComplexItem::_updateWizardMode);
     connect(&_AgricultureAreaPolygon,        &QGCMapPolygon::traceModeChanged,           this, &AgricultureComplexItem::_updateWizardMode);
 
-    connect(&_exclusionAreaPolygon,     &QGCMapPolygon::polygonChanged,             this, &AgricultureComplexItem::_rebuildTransects); // запертная зона 
+    connect(&_exclusionAreaPolygon, &QGCMapPolygon::pathChanged, this, &AgricultureComplexItem::_rebuildTransects); // запертная зона 
 
     if (!kmlOrShpFile.isEmpty()) {
         _AgricultureAreaPolygon.loadKMLOrSHPFile(kmlOrShpFile);
@@ -724,7 +724,29 @@ void AgricultureComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool ref
 
     // Now intersect the lines with the polygon
     QList<QLineF> intersectLines;
-##if 1
+
+    // --- НАЧАЛО ИЗМЕНЕНИЙ ---
+    
+    // Подготавливаем запретный полигон (переводим из Geo координат в локальные NED, как и главный полигон)
+    QPolygonF exclusionPolygonLocal;
+    if (_exclusionAreaPolygon.count() >= 3) {
+         for (int i=0; i<_exclusionAreaPolygon.count(); i++) {
+            double y, x, down;
+            QGeoCoordinate vertex = _exclusionAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(i)->coordinate();
+            QGCGeo::convertGeoToNed(vertex, tangentOrigin, y, x, down);
+            exclusionPolygonLocal << QPointF(x, y);
+        }
+        // Замыкаем полигон (первая точка = последней) для корректной математики, если нужно, 
+        // но QPolygonF обычно работает и так, однако для Line intersections лучше иметь замкнутый список линий.
+        exclusionPolygonLocal << exclusionPolygonLocal.first();
+    }
+
+    // Вызываем нашу функцию наложения слоев
+    _intersectLinesWithPolygonsAndHoles(lineList, allowedPolygon, exclusionPolygonLocal, intersectLines);
+
+    // --- КОНЕЦ ИЗМЕНЕНИЙ ---
+    
+#if 1
     // <<< Единый вызов универсальной функции
     if (exclusionPolygon.count() >= 3) {
         _intersectLinesWithPolygonsAndHoles(lineList, allowedPolygon, exclusionPolygon, intersectLines);
@@ -750,7 +772,7 @@ void AgricultureComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool ref
         lineList.clear();
         lineList.append(firstLine);
         intersectLines = lineList;
-        _intersectLinesWithPolygon(lineList, polygon, intersectLines);
+        _intersectLinesWithPolygon(lineList, allowedPolygon, intersectLines);
     }
 
     // Make sure all lines are going the same direction. Polygon intersection leads to lines which
@@ -817,9 +839,9 @@ void AgricultureComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool ref
         QList<TransectStyleComplexItem::CoordInfo_t>    coordInfoTransect;
         TransectStyleComplexItem::CoordInfo_t           coordInfo;
 
-        coordInfo = { transect[0], CoordTypeAgricultureEntry };
+        coordInfo = { transect[0], CoordTypeSurveyEntry };
         coordInfoTransect.append(coordInfo);
-        coordInfo = { transect[1], CoordTypeAgricultureExit };
+        coordInfo = { transect[1], CoordTypeSurveyExit };
         coordInfoTransect.append(coordInfo);
 
         // For hover and capture we need points for each camera location within the transect
@@ -1224,9 +1246,9 @@ void AgricultureComplexItem::_rebuildTransectsFromPolygon(bool refly, const QPol
         QList<TransectStyleComplexItem::CoordInfo_t>    coordInfoTransect;
         TransectStyleComplexItem::CoordInfo_t           coordInfo;
 
-        coordInfo = { transect[0], CoordTypeAgricultureEntry };
+        coordInfo = { transect[0], CoordTypeSurveyEntry };
         coordInfoTransect.append(coordInfo);
-        coordInfo = { transect[1], CoordTypeAgricultureExit };
+        coordInfo = { transect[1], CoordTypeSurveyExit };
         coordInfoTransect.append(coordInfo);
 
         // For hover and capture we need points for each camera location within the transect
@@ -1376,52 +1398,59 @@ void AgricultureComplexItem::_updateWizardMode(void)
 }
 
 
-#include <QGeoPolygonUtils.h> // Предполагается, что QGC использует QGeoPolygonUtils или аналогичную библиотеку
+// -------------------------------------------------------------------------
+// Новые методы для обработки запретных зон (Exclusion Zones)
+// -------------------------------------------------------------------------
 
 void AgricultureComplexItem::_intersectLinesWithPolygonsAndHoles(const QList<QLineF>& lineList, const QPolygonF& mainPolygon, const QPolygonF& exclusionPolygon, QList<QLineF>& resultLines)
 {
     resultLines.clear();
 
     for (const QLineF& line : lineList) {
+        // Список для хранения всех точек пересечения (и с главным, и с запретным полигонами)
         QList<QPointF> allIntersections;
 
-        // 1. Находим все пересечения с ГЛАВНЫМ полигоном
+        // 1. Находим пересечения с ГЛАВНЫМ (Разрешенным) полигоном
         for (int j=0; j<mainPolygon.count()-1; j++) {
             QPointF intersectPoint;
             QLineF polygonLine = QLineF(mainPolygon[j], mainPolygon[j+1]);
-
+            
             if (line.intersects(polygonLine, &intersectPoint) == QLineF::BoundedIntersection) {
-                if (!allIntersections.contains(intersectPoint)) {
-                    allIntersections.append(intersectPoint);
+                // Добавляем, если такой точки еще нет (защита от дублей на вершинах)
+                bool found = false;
+                for(const QPointF& existing : allIntersections) {
+                    if (QLineF(existing, intersectPoint).length() < 0.001) { found = true; break; }
+                }
+                if (!found) allIntersections.append(intersectPoint);
+            }
+        }
+
+        // 2. Находим пересечения с ЗАПРЕТНЫМ полигоном (если он есть)
+        if (!exclusionPolygon.isEmpty()) {
+            for (int j=0; j<exclusionPolygon.count()-1; j++) {
+                QPointF intersectPoint;
+                QLineF polygonLine = QLineF(exclusionPolygon[j], exclusionPolygon[j+1]);
+
+                if (line.intersects(polygonLine, &intersectPoint) == QLineF::BoundedIntersection) {
+                     bool found = false;
+                    for(const QPointF& existing : allIntersections) {
+                        if (QLineF(existing, intersectPoint).length() < 0.001) { found = true; break; }
+                    }
+                    if (!found) allIntersections.append(intersectPoint);
                 }
             }
         }
 
-        // 2. Находим все пересечения с ЗАПРЕТНЫМ полигоном
-        for (int j=0; j<exclusionPolygon.count()-1; j++) {
-            QPointF intersectPoint;
-            QLineF polygonLine = QLineF(exclusionPolygon[j], exclusionPolygon[j+1]);
+        // Если точек пересечения меньше 2, значит линия не проходит через полигон
+        if (allIntersections.count() < 2) continue;
 
-            if (line.intersects(polygonLine, &intersectPoint) == QLineF::BoundedIntersection) {
-                if (!allIntersections.contains(intersectPoint)) {
-                    allIntersections.append(intersectPoint);
-                }
-            }
-        }
-        
-        // Удаляем дубликаты
-        // ... (QList.contains() уже использовался, но можно добавить более строгую фильтрацию)
-        
-        // 3. Сортируем точки вдоль линии
-        if (allIntersections.count() < 2) {
-            continue;
-        }
-        
-        // Используем проекцию на линию для сортировки
+        // 3. Сортируем точки вдоль линии (от начала к концу)
+        // Это критически важно, чтобы правильно разбить линию на сегменты
         QVector<QPair<double, QPointF>> projectedPoints;
         QPointF p1 = line.p1();
         QPointF v = line.p2() - p1;
         double lineLenSq = QPointF::dotProduct(v, v);
+        if (lineLenSq < 0.000001) continue;
 
         for (const QPointF& pt : allIntersections) {
             QPointF w = pt - p1;
@@ -1433,25 +1462,29 @@ void AgricultureComplexItem::_intersectLinesWithPolygonsAndHoles(const QList<QLi
             return a.first < b.first;
         });
 
-        // 4. Проверяем середину каждого сегмента
+        // 4. Проходим по сегментам и проверяем их валидность
         for (int i = 0; i < projectedPoints.count() - 1; ++i) {
             QPointF start = projectedPoints[i].second;
             QPointF end = projectedPoints[i+1].second;
+            
+            // Берем середину отрезка для проверки
             QPointF midpoint = (start + end) / 2.0;
 
-            // Проверка: находится ли середина ВНУТРИ главного полигона И ВНЕ запретного полигона
+            // ГЛАВНАЯ ЛОГИКА:
+            // Точка должна быть ВНУТРИ главного полигона
+            bool inMain = _containsPoint(mainPolygon, midpoint);
             
-            // QGeoPolygonUtils::containsPoint - предполагаем, что этот или аналогичный метод доступен
-            // и работает с QPolygonF. Если нет, это нужно будет заменить на доступный метод.
-            
-            // Важно: Проверка "внутри" для QPolygonF может быть выполнена через QPolygonF::containsPoint
-            // QPolygonF::containsPoint(point) возвращает true, если точка внутри или на границе.
-            
-            bool inMain = _containsPoint(mainPolygon, midpoint);     // <<< НОВЫЙ ВЫЗОВ
-            bool inExclusion = _containsPoint(exclusionPolygon, midpoint);  // <<< НОВЫЙ ВЫЗОВ
+            // И ВНЕ запретного полигона
+            bool inExclusion = false;
+            if (!exclusionPolygon.isEmpty()) {
+                inExclusion = _containsPoint(exclusionPolygon, midpoint);
+            }
 
+            // Если оба условия соблюдены - это наш кусок маршрута
             if (inMain && !inExclusion) {
-                resultLines.append(QLineF(start, end));
+                if (QLineF(start, end).length() > 0.05) { // Игнорируем микро-отрезки
+                    resultLines.append(QLineF(start, end));
+                }
             }
         }
     }
@@ -1459,41 +1492,71 @@ void AgricultureComplexItem::_intersectLinesWithPolygonsAndHoles(const QList<QLi
 
 bool AgricultureComplexItem::_containsPoint(const QPolygonF& polygon, const QPointF& point) const
 {
-    if (polygon.isEmpty()) {
+    // Qt::OddEvenFill - стандартный алгоритм для определения точки внутри полигона
+    return polygon.containsPoint(point, Qt::OddEvenFill);
+}
+void AgricultureComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* missionItemParent)
+{
+    int seqNum = _sequenceNumber;
+
+    // Вызываем worker только один раз, так как _transects уже содержит все проходы (включая refly, если он есть)
+    _appendMissionItemsWorker(items, missionItemParent, seqNum, false /* hasRefly */, false /* buildRefly */);
+}
+
+bool AgricultureComplexItem::_appendMissionItemsWorker(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool /*hasRefly*/, bool /*buildRefly*/)
+{
+    if (_transects.count() == 0) {
         return false;
     }
 
-    int intersectCount = 0;
-    
-    // Перебираем все сегменты полигона. Итерация идет до count()-1, так как последняя точка - это первая
-    // в замкнутом полигоне, и ее пересечение с первой точкой обрабатывается в цикле.
-    for (int i = 0; i < polygon.count(); ++i) {
-        QPointF p1 = polygon[i];
-        QPointF p2 = polygon[(i + 1) % polygon.count()]; // Замыкаем последнюю точку с первой
+    for (int i=0; i<_transects.count(); i++) {
+        const QList<CoordInfo_t>& transect = _transects[i];
 
-        // Проверяем, находится ли точка на границе (крайне маловероятно, но необходимо)
-        if (QLineF(p1, p2).containsPoint(point, 1.0)) { // 1.0 - небольшой допуск
-            return true;
-        }
+        for (const CoordInfo_t& coordInfo : transect) {
+            // Определяем тип точки (вход, выход или промежуточная)
+            bool isEntry = (coordInfo.coordType == CoordTypeSurveyEntry);
+            bool isExit  = (coordInfo.coordType == CoordTypeSurveyExit);
 
-        // Ray casting: проверяем пересечение горизонтального луча, исходящего из точки,
-        // с сегментами полигона.
-        
-        // 1. Убеждаемся, что сегмент p1-p2 пересекает горизонтальный луч (находится в y-диапазоне точки)
-        if (((p1.y() <= point.y()) && (p2.y() > point.y())) ||
-            ((p2.y() <= point.y()) && (p1.y() > point.y()))) {
-            
-            // 2. Рассчитываем x-координату пересечения луча с сегментом
-            double vt = (point.y() - p1.y()) / (p2.y() - p1.y());
-            double intersectX = p1.x() + vt * (p2.x() - p1.x());
+            // Если это вход в траншею — включаем опрыскиватель
+            if (isEntry) {
+                _appendSprayerCommand(items, missionItemParent, seqNum, true); // Включить
+            }
 
-            // 3. Если пересечение находится справа от точки, то это "счетное" пересечение
-            if (point.x() < intersectX) {
-                intersectCount++;
+            // Создаем саму путевую точку (Waypoint)
+            MissionItem* item = new MissionItem(seqNum++,
+                                                MAV_CMD_NAV_WAYPOINT,
+                                                MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                                                0, 0, 0, 0, // params 1-4 (hold, accept radius, etc)
+                                                coordInfo.coord.latitude(),
+                                                coordInfo.coord.longitude(),
+                                                coordInfo.coord.altitude(),
+                                                true,  // autocontinue
+                                                false, // isCurrentItem
+                                                missionItemParent);
+            items.append(item);
+
+            // Если это выход из траншеи — выключаем опрыскиватель
+            if (isExit) {
+                _appendSprayerCommand(items, missionItemParent, seqNum, false); // Выключить
             }
         }
     }
+    return true;
+}
 
-    // Если количество пересечений нечетное, точка внутри. Если четное - снаружи.
-    return (intersectCount % 2) != 0;
+void AgricultureComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool active)
+{
+    // Реализация команды управления опрыскивателем.
+    // MAV_CMD_DO_SPRAYER (216)
+    // Param 1: 1 = on, 0 = off
+    
+    MissionItem* item = new MissionItem(seqNum++,
+                                        MAV_CMD_DO_SPRAYER,
+                                        MAV_FRAME_MISSION,
+                                        active ? 1 : 0, // Param 1: Active
+                                        0, 0, 0, 0, 0, 0, // Остальные параметры не используются
+                                        true, // autocontinue
+                                        false, // isCurrentItem
+                                        missionItemParent);
+    items.append(item);
 }

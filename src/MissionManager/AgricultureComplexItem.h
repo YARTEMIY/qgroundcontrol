@@ -48,12 +48,10 @@ public:
     void            savePreset          (const QString& name);
     void            loadPreset          (const QString& name);
     bool            isSurveyItem        (void) const final { return true; }
-    QGeoCoordinate  centerCoordinate    (void) const { return _surveyAreaPolygon.center(); }
-    void            setCenterCoordinate (const QGeoCoordinate& coordinate) { _surveyAreaPolygon.setCenter(coordinate); }
-    
+    QGeoCoordinate  centerCoordinate    (void) const { return _AgricultureAreaPolygon.center(); }
+    void            setCenterCoordinate (const QGeoCoordinate& coordinate) { _AgricultureAreaPolygon.setCenter(coordinate); }
     // мое 
     QGCMapPolygon* exclusionAreaPolygon(void) { return &_exclusionAreaPolygon; }
-
     // Overrides from TransectStyleComplexItem
     void    save                (QJsonArray&  planItems) final;
     bool    specifiesCoordinate (void) const final { return true; }
@@ -193,6 +191,7 @@ private:
     
     // мое
     QGCMapPolygon   _exclusionAreaPolygon; 
+    QGCMapPolygon   _AgricultureAreaPolygon;
 
     static constexpr const char* _jsonGridAngleKey =          "angle";
     static constexpr const char* _jsonEntryPointKey =         "entryLocation";
