@@ -23,6 +23,7 @@ tags
 # Build System & CMake
 # ------------------------------------------------------------------------------
 build/
+build_master/
 cmake-build-*/
 out/
 CMakeFiles

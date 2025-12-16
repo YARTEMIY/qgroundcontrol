@@ -34,6 +34,8 @@ AgricultureComplexItem::AgricultureComplexItem(PlanMasterController* masterContr
     , _gridAngleFact            (settingsGroup, _metaDataMap[gridAngleName])
     , _flyAlternateTransectsFact(settingsGroup, _metaDataMap[flyAlternateTransectsName])
     , _splitConcavePolygonsFact (settingsGroup, _metaDataMap[splitConcavePolygonsName])
+    , _AgricultureAreaPolygon   (this /* parent */)
+    , _exclusionAreaPolygon     (this /* parent */)
     , _entryPoint               (EntryLocationTopLeft)
 {
     _editorQml = "qrc:/qml/QGroundControl/Controls/AgricultureItemEditor.qml";
@@ -619,11 +621,13 @@ void AgricultureComplexItem::_rebuildTransectsPhase1(void)
 
 void AgricultureComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
 {
+    qCDebug(AgricultureComplexItemLog) << "_rebuildTransectsPhase1WorkerSinglePolygon: Start. Refly:" << refly;
+
     if (_ignoreRecalc) {
+        qCDebug(AgricultureComplexItemLog) << "Ignoring recalc";
         return;
     }
 
-    // If the transects are getting rebuilt then any previously loaded mission items are now invalid
     if (_loadedMissionItemsParent) {
         _loadedMissionItems.clear();
         _loadedMissionItemsParent->deleteLater();
@@ -631,160 +635,175 @@ void AgricultureComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool ref
     }
 
     if (_AgricultureAreaPolygon.count() < 3) {
+        qCWarning(AgricultureComplexItemLog) << "Not enough points in polygon:" << _AgricultureAreaPolygon.count();
         return;
     }
 
-    // Convert polygon to NED
+    // --- БЕЗОПАСНОЕ ПОЛУЧЕНИЕ TANGENT ORIGIN ---
+    QGCQGeoCoordinate* tangentOriginObj = _AgricultureAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(0);
+    if (!tangentOriginObj) {
+        qCCritical(AgricultureComplexItemLog) << "CRITICAL: Tangent origin object is NULL";
+        return; 
+    }
+    QGeoCoordinate tangentOrigin = tangentOriginObj->coordinate();
+    if (!tangentOrigin.isValid()) {
+        qCCritical(AgricultureComplexItemLog) << "CRITICAL: Tangent origin coordinate is invalid";
+        return;
+    }
 
+    qCDebug(AgricultureComplexItemLog) << "Tangent Origin:" << tangentOrigin;
+
+    // 1. Конвертация главного полигона в NED
     QList<QPointF> polygonPoints;
-    QGeoCoordinate tangentOrigin = _AgricultureAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(0)->coordinate();
-    qCDebug(AgricultureComplexItemLog) << "_rebuildTransectsPhase1 Convert polygon to NED - _AgricultureAreaPolygon.count():tangentOrigin" << _AgricultureAreaPolygon.count() << tangentOrigin;
+    
     for (int i=0; i<_AgricultureAreaPolygon.count(); i++) {
+        QGCQGeoCoordinate* vertexObj = _AgricultureAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(i);
+        if (!vertexObj) {
+            qCWarning(AgricultureComplexItemLog) << "Main Polygon vertex" << i << "is NULL. Skipping.";
+            continue; 
+        }
+        
         double y, x, down;
-        QGeoCoordinate vertex = _AgricultureAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(i)->coordinate();
+        QGeoCoordinate vertex = vertexObj->coordinate();
+        
         if (i == 0) {
-            // This avoids a nan calculation that comes out of convertGeoToNed
             x = y = 0;
         } else {
             QGCGeo::convertGeoToNed(vertex, tangentOrigin, y, x, down);
         }
+        
+        if (std::isnan(x) || std::isnan(y)) {
+            qCCritical(AgricultureComplexItemLog) << "NaN detected in Main Polygon vertex" << i << x << y;
+            continue; 
+        }
+        
         polygonPoints += QPointF(x, y);
-        qCDebug(AgricultureComplexItemLog) << "_rebuildTransectsPhase1 vertex:x:y" << vertex << polygonPoints.last().x() << polygonPoints.last().y();
     }
 
-    // Generate transects
+    if (polygonPoints.count() < 3) {
+        qCWarning(AgricultureComplexItemLog) << "Main Polygon has less than 3 valid points after processing";
+        return;
+    }
 
     double gridAngle = _gridAngleFact.rawValue().toDouble();
     double gridSpacing = _cameraCalc.adjustedFootprintSide()->rawValue().toDouble();
     if (gridSpacing < _minimumTransectSpacingMeters) {
-        // We can't let spacing get too small otherwise we will end up with too many transects.
-        // So we limit the spacing to be above a small increment and below that value we set to huge spacing
-        // which will cause a single transect to be added instead of having things blow up.
         gridSpacing = _forceLargeTransectSpacingMeters;
     }
 
     gridAngle = _clampGridAngle90(gridAngle);
     gridAngle += refly ? 90 : 0;
-    qCDebug(AgricultureComplexItemLog) << "_rebuildTransectsPhase1 Clamped grid angle" << gridAngle;
 
-    qCDebug(AgricultureComplexItemLog) << "_rebuildTransectsPhase1 gridSpacing:gridAngle:refly" << gridSpacing << gridAngle << refly;
+    qCDebug(AgricultureComplexItemLog) << "Grid Config - Angle:" << gridAngle << "Spacing:" << gridSpacing;
 
-    // Convert polygon to bounding rect
-
-    qCDebug(AgricultureComplexItemLog) << "_rebuildTransectsPhase1 Allowed Polygon";
-    QPolygonF allowedPolygon; // Главный полигон
+    // 2. Подготовка главного полигона
+    QPolygonF allowedPolygon; 
     for (int i=0; i<polygonPoints.count(); i++) {
-        qCDebug(AgricultureComplexItemLog) << "Vertex" << polygonPoints[i];
         allowedPolygon << polygonPoints[i];
     }
-    allowedPolygon << polygonPoints[0];
-    QRectF boundingRect = allowedPolygon.boundingRect();
-
-    // <<< ДОБАВЛЕНО ДЛЯ ЗАПРЕТНОЙ ЗОНЫ
-    QPolygonF exclusionPolygon;
-    if (_exclusionAreaPolygon.count() >= 3) {
-        QList<QPointF> exclusionPoints;
-        for (int i=0; i<_exclusionAreaPolygon.count(); i++) {
-            double y, x, down;
-            QGeoCoordinate vertex = _exclusionAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(i)->coordinate();
-            QGCGeo::convertGeoToNed(vertex, tangentOrigin, y, x, down);
-            exclusionPoints += QPointF(x, y);
-            qCDebug(AgricultureComplexItemLog) << "_rebuildTransectsPhase1 Exclusion vertex:x:y" << vertex << exclusionPoints.last().x() << exclusionPoints.last().y();
-        }
-        for (int i=0; i<exclusionPoints.count(); i++) {
-            exclusionPolygon << exclusionPoints[i];
-        }
-        exclusionPolygon << exclusionPoints[0];
-        boundingRect = boundingRect.united(exclusionPolygon.boundingRect());
+    if (!allowedPolygon.isEmpty()) {
+        allowedPolygon << polygonPoints[0];
     }
-    //
     
+    QRectF boundingRect = allowedPolygon.boundingRect();
+    qCDebug(AgricultureComplexItemLog) << "Main Polygon Bounding Rect:" << boundingRect;
+
+    // 3. Подготовка запретного полигона
+    QPolygonF exclusionPolygonLocal;
+    
+    int exclCount = _exclusionAreaPolygon.count();
+    qCDebug(AgricultureComplexItemLog) << "Exclusion Polygon points count:" << exclCount;
+
+    if (exclCount >= 3) {
+        for (int i=0; i<exclCount; i++) {
+            QGCQGeoCoordinate* geoPoint = _exclusionAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(i);
+            if (geoPoint) {
+                double y, x, down;
+                QGeoCoordinate vertex = geoPoint->coordinate();
+                QGCGeo::convertGeoToNed(vertex, tangentOrigin, y, x, down);
+                
+                if (!std::isnan(x) && !std::isnan(y)) {
+                    exclusionPolygonLocal << QPointF(x, y);
+                } else {
+                    qCWarning(AgricultureComplexItemLog) << "NaN in Exclusion vertex" << i;
+                }
+            } else {
+                qCWarning(AgricultureComplexItemLog) << "Exclusion vertex" << i << "is NULL";
+            }
+        }
+        
+        if (!exclusionPolygonLocal.isEmpty()) {
+            exclusionPolygonLocal << exclusionPolygonLocal.first();
+            boundingRect = boundingRect.united(exclusionPolygonLocal.boundingRect());
+            qCDebug(AgricultureComplexItemLog) << "Exclusion Polygon valid. New Bounding Rect:" << boundingRect;
+        } else {
+            qCDebug(AgricultureComplexItemLog) << "Exclusion Polygon is empty after processing";
+        }
+    }
+
     QPointF boundingCenter = boundingRect.center();
-    qCDebug(AgricultureComplexItemLog) << "Bounding rect" << boundingRect.topLeft().x() << boundingRect.topLeft().y() << boundingRect.bottomRight().x() << boundingRect.bottomRight().y();
 
-    // Create set of rotated parallel lines within the expanded bounding rect. Make the lines larger than the
-    // bounding box to guarantee intersection.
-
+    // 4. Генерация линий
     QList<QLineF> lineList;
-
-    // Transects are generated to be as long as the largest width/height of the bounding rect plus some fudge factor.
-    // This way they will always be guaranteed to intersect with a polygon edge no matter what angle they are rotated to.
-    // They are initially generated with the transects flowing from west to east and then points within the transect north to south.
     double maxWidth = qMax(boundingRect.width(), boundingRect.height()) + 2000.0;
     double halfWidth = maxWidth / 2.0;
     double transectX = boundingCenter.x() - halfWidth;
     double transectXMax = transectX + maxWidth;
+    
+    if (gridSpacing <= 0.1) {
+        qCWarning(AgricultureComplexItemLog) << "Grid spacing is too small:" << gridSpacing << "Forcing to 1.0";
+        gridSpacing = 1.0;
+    }
+
+    int safetyLoopCount = 0;
     while (transectX < transectXMax) {
         double transectYTop = boundingCenter.y() - halfWidth;
         double transectYBottom = boundingCenter.y() + halfWidth;
 
-        lineList += QLineF(_rotatePoint(QPointF(transectX, transectYTop), boundingCenter, gridAngle), _rotatePoint(QPointF(transectX, transectYBottom), boundingCenter, gridAngle));
+        lineList += QLineF(_rotatePoint(QPointF(transectX, transectYTop), boundingCenter, gridAngle), 
+                           _rotatePoint(QPointF(transectX, transectYBottom), boundingCenter, gridAngle));
         transectX += gridSpacing;
-    }
-
-    // Now intersect the lines with the polygon
-    QList<QLineF> intersectLines;
-
-    // --- НАЧАЛО ИЗМЕНЕНИЙ ---
-    
-    // Подготавливаем запретный полигон (переводим из Geo координат в локальные NED, как и главный полигон)
-    QPolygonF exclusionPolygonLocal;
-    if (_exclusionAreaPolygon.count() >= 3) {
-         for (int i=0; i<_exclusionAreaPolygon.count(); i++) {
-            double y, x, down;
-            QGeoCoordinate vertex = _exclusionAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(i)->coordinate();
-            QGCGeo::convertGeoToNed(vertex, tangentOrigin, y, x, down);
-            exclusionPolygonLocal << QPointF(x, y);
+        
+        safetyLoopCount++;
+        if (safetyLoopCount > 10000) {
+            qCCritical(AgricultureComplexItemLog) << "Infinite loop detected in line generation! Aborting.";
+            break;
         }
-        // Замыкаем полигон (первая точка = последней) для корректной математики, если нужно, 
-        // но QPolygonF обычно работает и так, однако для Line intersections лучше иметь замкнутый список линий.
-        exclusionPolygonLocal << exclusionPolygonLocal.first();
     }
+    qCDebug(AgricultureComplexItemLog) << "Generated raw lines:" << lineList.count();
 
-    // Вызываем нашу функцию наложения слоев
+    // 5. Пересечение
+    QList<QLineF> intersectLines;
     _intersectLinesWithPolygonsAndHoles(lineList, allowedPolygon, exclusionPolygonLocal, intersectLines);
-
-    // --- КОНЕЦ ИЗМЕНЕНИЙ ---
     
-#if 1
-    // <<< Единый вызов универсальной функции
-    if (exclusionPolygon.count() >= 3) {
-        _intersectLinesWithPolygonsAndHoles(lineList, allowedPolygon, exclusionPolygon, intersectLines);
-    } else {
-        // Если запретной зоны нет, вызываем старый метод, который теперь является оберткой
-        // над _intersectLinesWithPolygonsAndHoles(..., allowedPolygon, emptyPolygon, ...)
-        _intersectLinesWithPolygon(lineList, allowedPolygon, intersectLines);
-    }
-#else
-    // This is handy for debugging grid problems, not for release
-    intersectLines = lineList;
-#endif
+    qCDebug(AgricultureComplexItemLog) << "Lines after intersection:" << intersectLines.count();
 
-    // Less than two transects intersected with the polygon:
-    //      Create a single transect which goes through the center of the polygon
-    //      Intersect it with the polygon
+    // Резервный вариант
     if (intersectLines.count() < 2) {
-        _AgricultureAreaPolygon.center();
-        QLineF firstLine = lineList.first();
-        QPointF lineCenter = firstLine.pointAt(0.5);
-        QPointF centerOffset = boundingCenter - lineCenter;
-        firstLine.translate(centerOffset);
-        lineList.clear();
-        lineList.append(firstLine);
-        intersectLines = lineList;
-        _intersectLinesWithPolygon(lineList, allowedPolygon, intersectLines);
+        qCDebug(AgricultureComplexItemLog) << "Too few lines. Creating fallback line through center.";
+        if (!lineList.isEmpty()) {
+            QLineF firstLine = lineList.first();
+            QPointF lineCenter = firstLine.pointAt(0.5);
+            QPointF centerOffset = boundingCenter - lineCenter;
+            firstLine.translate(centerOffset);
+            lineList.clear();
+            lineList.append(firstLine);
+            intersectLines = lineList;
+            
+            QPolygonF emptyPoly; 
+            _intersectLinesWithPolygonsAndHoles(lineList, allowedPolygon, emptyPoly, intersectLines);
+        }
     }
 
-    // Make sure all lines are going the same direction. Polygon intersection leads to lines which
-    // can be in varied directions depending on the order of the intesecting sides.
+    // 6. Постобработка
     QList<QLineF> resultLines;
     _adjustLineDirection(intersectLines, resultLines);
 
-    // Convert from NED to Geo
+    // 7. Конвертация в Geo
     QList<QList<QGeoCoordinate>> transects;
     for (const QLineF& line : resultLines) {
-        QGeoCoordinate          coord;
-        QList<QGeoCoordinate>   transect;
+        QGeoCoordinate coord;
+        QList<QGeoCoordinate> transect;
 
         QGCGeo::convertNedToGeo(line.p1().y(), line.p1().x(), 0, tangentOrigin, coord);
         transect.append(coord);
@@ -796,29 +815,23 @@ void AgricultureComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool ref
 
     _adjustTransectsToEntryPointLocation(transects);
 
-    if (refly) {
-        _optimizeTransectsForShortestDistance(_transects.last().last().coord, transects);
+    if (refly && !transects.isEmpty()) {
+        _optimizeTransectsForShortestDistance(_transects.isEmpty() ? QGeoCoordinate() : _transects.last().last().coord, transects);
     }
 
     if (_flyAlternateTransectsFact.rawValue().toBool()) {
         QList<QList<QGeoCoordinate>> alternatingTransects;
         for (int i=0; i<transects.count(); i++) {
-            if (!(i & 1)) {
-                alternatingTransects.append(transects[i]);
-            }
+            if (!(i & 1)) alternatingTransects.append(transects[i]);
         }
         for (int i=transects.count()-1; i>0; i--) {
-            if (i & 1) {
-                alternatingTransects.append(transects[i]);
-            }
+            if (i & 1) alternatingTransects.append(transects[i]);
         }
         transects = alternatingTransects;
     }
 
-    // Adjust to lawnmower pattern
     bool reverseVertices = false;
     for (int i=0; i<transects.count(); i++) {
-        // We must reverse the vertices for every other transect in order to make a lawnmower pattern
         QList<QGeoCoordinate> transectVertices = transects[i];
         if (reverseVertices) {
             reverseVertices = false;
@@ -833,24 +846,25 @@ void AgricultureComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool ref
         transects[i] = transectVertices;
     }
 
-    // Convert to CoordInfo transects and append to _transects
+    // 8. Финальная сборка
+    int itemsCreated = 0;
     for (const QList<QGeoCoordinate>& transect : transects) {
-        QGeoCoordinate                                  coord;
-        QList<TransectStyleComplexItem::CoordInfo_t>    coordInfoTransect;
-        TransectStyleComplexItem::CoordInfo_t           coordInfo;
+        if (transect.count() < 2) continue;
+
+        QGeoCoordinate coord;
+        QList<TransectStyleComplexItem::CoordInfo_t> coordInfoTransect;
+        TransectStyleComplexItem::CoordInfo_t coordInfo;
 
         coordInfo = { transect[0], CoordTypeSurveyEntry };
         coordInfoTransect.append(coordInfo);
         coordInfo = { transect[1], CoordTypeSurveyExit };
         coordInfoTransect.append(coordInfo);
 
-        // For hover and capture we need points for each camera location within the transect
         if (triggerCamera() && hoverAndCaptureEnabled()) {
             double transectLength = transect[0].distanceTo(transect[1]);
             double transectAzimuth = transect[0].azimuthTo(transect[1]);
-            if (triggerDistance() < transectLength) {
+            if (triggerDistance() < transectLength && triggerDistance() > 0) {
                 int cInnerHoverPoints = static_cast<int>(floor(transectLength / triggerDistance()));
-                qCDebug(AgricultureComplexItemLog) << "cInnerHoverPoints" << cInnerHoverPoints;
                 for (int i=0; i<cInnerHoverPoints; i++) {
                     QGeoCoordinate hoverCoord = transect[0].atDistanceAndAzimuth(triggerDistance() * (i + 1), transectAzimuth);
                     TransectStyleComplexItem::CoordInfo_t coordInfo = { hoverCoord, CoordTypeInteriorHoverTrigger };
@@ -859,7 +873,6 @@ void AgricultureComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool ref
             }
         }
 
-        // Extend the transect ends for turnaround
         if (_hasTurnaround()) {
             QGeoCoordinate turnaroundCoord;
             double turnAroundDistance = _turnAroundDistanceFact.rawValue().toDouble();
@@ -878,8 +891,12 @@ void AgricultureComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool ref
         }
 
         _transects.append(coordInfoTransect);
+        itemsCreated++;
     }
+    
+    qCDebug(AgricultureComplexItemLog) << "_rebuildTransectsPhase1WorkerSinglePolygon: Done. Transects created:" << itemsCreated;
 }
+
 
 #if 0
     // Splitting polygons is not supported since this code would get stuck in a infinite loop
@@ -1405,51 +1422,61 @@ void AgricultureComplexItem::_updateWizardMode(void)
 void AgricultureComplexItem::_intersectLinesWithPolygonsAndHoles(const QList<QLineF>& lineList, const QPolygonF& mainPolygon, const QPolygonF& exclusionPolygon, QList<QLineF>& resultLines)
 {
     resultLines.clear();
+    // qCDebug(AgricultureComplexItemLog) << "Intersecting" << lineList.count() << "lines with polygons";
 
     for (const QLineF& line : lineList) {
-        // Список для хранения всех точек пересечения (и с главным, и с запретным полигонами)
         QList<QPointF> allIntersections;
 
-        // 1. Находим пересечения с ГЛАВНЫМ (Разрешенным) полигоном
+        // 1. Главный полигон
         for (int j=0; j<mainPolygon.count()-1; j++) {
             QPointF intersectPoint;
             QLineF polygonLine = QLineF(mainPolygon[j], mainPolygon[j+1]);
-            
+
             if (line.intersects(polygonLine, &intersectPoint) == QLineF::BoundedIntersection) {
-                // Добавляем, если такой точки еще нет (защита от дублей на вершинах)
                 bool found = false;
                 for(const QPointF& existing : allIntersections) {
-                    if (QLineF(existing, intersectPoint).length() < 0.001) { found = true; break; }
+                    if (QLineF(existing, intersectPoint).length() < 0.001) {
+                        found = true;
+                        break;
+                    }
                 }
-                if (!found) allIntersections.append(intersectPoint);
+                if (!found) {
+                    allIntersections.append(intersectPoint);
+                }
             }
         }
 
-        // 2. Находим пересечения с ЗАПРЕТНЫМ полигоном (если он есть)
+        // 2. Запретный полигон
         if (!exclusionPolygon.isEmpty()) {
             for (int j=0; j<exclusionPolygon.count()-1; j++) {
                 QPointF intersectPoint;
                 QLineF polygonLine = QLineF(exclusionPolygon[j], exclusionPolygon[j+1]);
 
                 if (line.intersects(polygonLine, &intersectPoint) == QLineF::BoundedIntersection) {
-                     bool found = false;
+                    bool found = false;
                     for(const QPointF& existing : allIntersections) {
-                        if (QLineF(existing, intersectPoint).length() < 0.001) { found = true; break; }
+                        if (QLineF(existing, intersectPoint).length() < 0.001) {
+                            found = true;
+                            break;
+                        }
                     }
-                    if (!found) allIntersections.append(intersectPoint);
+                    if (!found) {
+                        allIntersections.append(intersectPoint);
+                    }
                 }
             }
         }
-
-        // Если точек пересечения меньше 2, значит линия не проходит через полигон
-        if (allIntersections.count() < 2) continue;
-
-        // 3. Сортируем точки вдоль линии (от начала к концу)
-        // Это критически важно, чтобы правильно разбить линию на сегменты
+        
+        if (allIntersections.count() < 2) {
+            continue;
+        }
+        
+        // 3. Сортировка
         QVector<QPair<double, QPointF>> projectedPoints;
         QPointF p1 = line.p1();
         QPointF v = line.p2() - p1;
         double lineLenSq = QPointF::dotProduct(v, v);
+        
         if (lineLenSq < 0.000001) continue;
 
         for (const QPointF& pt : allIntersections) {
@@ -1462,34 +1489,27 @@ void AgricultureComplexItem::_intersectLinesWithPolygonsAndHoles(const QList<QLi
             return a.first < b.first;
         });
 
-        // 4. Проходим по сегментам и проверяем их валидность
+        // 4. Проверка сегментов
         for (int i = 0; i < projectedPoints.count() - 1; ++i) {
             QPointF start = projectedPoints[i].second;
             QPointF end = projectedPoints[i+1].second;
-            
-            // Берем середину отрезка для проверки
             QPointF midpoint = (start + end) / 2.0;
 
-            // ГЛАВНАЯ ЛОГИКА:
-            // Точка должна быть ВНУТРИ главного полигона
             bool inMain = _containsPoint(mainPolygon, midpoint);
-            
-            // И ВНЕ запретного полигона
             bool inExclusion = false;
+            
             if (!exclusionPolygon.isEmpty()) {
                 inExclusion = _containsPoint(exclusionPolygon, midpoint);
             }
 
-            // Если оба условия соблюдены - это наш кусок маршрута
             if (inMain && !inExclusion) {
-                if (QLineF(start, end).length() > 0.05) { // Игнорируем микро-отрезки
+                if (QLineF(start, end).length() > 0.05) {
                     resultLines.append(QLineF(start, end));
                 }
             }
         }
     }
 }
-
 bool AgricultureComplexItem::_containsPoint(const QPolygonF& polygon, const QPointF& point) const
 {
     // Qt::OddEvenFill - стандартный алгоритм для определения точки внутри полигона
