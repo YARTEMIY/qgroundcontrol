@@ -23,6 +23,9 @@ tags
 # Build System & CMake
 # ------------------------------------------------------------------------------
 build/
+build_agro/
+build_master/
+
 cmake-build-*/
 out/
 CMakeFiles
