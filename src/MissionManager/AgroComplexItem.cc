@@ -70,7 +70,7 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
 
 void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool active)
 {
-    float servoInstance = 9.0f;
+    float servoInstance = 5.0f;
     float turnOn = 1900.0f;
     float turnOff = 1100.0f;
 
@@ -92,12 +92,12 @@ void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject*
 void AgroComplexItem::_appendVisualAction(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, MAV_FRAME frame, const QGeoCoordinate& coord)
 {
     // === ВИЗУАЛЬНЫЙ ТЕСТ: "ПРЫЖОК" ===
-    
+
     // 1. Берем текущую высоту и добавляем 10 метров
     double jumpAltitude = coord.altitude() + 10.0;
-    
+
     // 2. Время зависания в верхней точке (в секундах)
-    float holdTime = 5.0f; 
+    float holdTime = 5.0f;
 
     MissionItem* item = new MissionItem(seqNum++,
                                         MAV_CMD_NAV_WAYPOINT, // Стандартная команда полета (поддерживается 100%)
@@ -124,7 +124,7 @@ void AgroComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* mi
     }
 
     int seqNum = _sequenceNumber;
-    
+
     // Определяем тип высоты
     MAV_FRAME mavFrame = MAV_FRAME_GLOBAL_RELATIVE_ALT;
     if (_cameraCalc.distanceMode() == QGroundControlQmlGlobal::AltitudeModeAbsolute ||
@@ -154,7 +154,7 @@ void AgroComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* mi
                 // Выключаем ПОСЛЕ прилета в точку выхода
                 _appendSprayerCommand(items, missionItemParent, seqNum, false);
                 break;
-                
+
             default:
                 break;
         }
