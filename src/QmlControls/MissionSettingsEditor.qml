@@ -3,20 +3,15 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 import QGroundControl
-
-
 import QGroundControl.Controls
 import QGroundControl.FactControls
-
-
-
 
 // Editor for Mission Settings
 Rectangle {
     id:     valuesRect
     width:  availableWidth
     height: valuesColumn.height + (_margin * 2)
-    color:  "transparent"
+    color:  qgcPal.windowShadeDark
     radius: _radius
 
     property var    _masterControler:               masterController

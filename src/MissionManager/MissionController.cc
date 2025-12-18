@@ -1957,7 +1957,7 @@ void MissionController::_initAllVisualItems(void)
     connect(_visualItems, &QmlObjectListModel::countChanged, this, &MissionController::_updateContainsItems);
 
     emit visualItemsChanged();
-    emit containsItemsChanged(containsItems());
+    emit containsItemsChanged();
     emit plannedHomePositionChanged(plannedHomePosition());
 
     if (!_flyView) {
@@ -2264,7 +2264,7 @@ void MissionController::_scanForAdditionalSettings(QmlObjectListModel* visualIte
 
 void MissionController::_updateContainsItems(void)
 {
-    emit containsItemsChanged(containsItems());
+    emit containsItemsChanged();
 }
 
 bool MissionController::containsItems(void) const

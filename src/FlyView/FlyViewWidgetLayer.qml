@@ -19,7 +19,6 @@ import QtQml.Models
 
 import QGroundControl
 import QGroundControl.Controls
-
 import QGroundControl.FlyView
 import QGroundControl.FlightMap
 
@@ -76,7 +75,6 @@ Item {
     FlyViewTopRightColumnLayout {
         id:                 topRightColumnLayout
         anchors.top:        parent.top
-        anchors.bottom:     bottomRightRowLayout.top
         anchors.right:      parent.right
         spacing:            _layoutSpacing
         visible:           !topRightPanel.visible
@@ -179,8 +177,6 @@ Item {
         anchors.left:       toolStrip.right
         anchors.top:        parent.top
         mapControl:         _mapControl
-        buttonsOnLeft:      true
-        zoomButtonsVisible: false
         autoHide:           true
         visible:            !ScreenTools.isTinyScreen && QGroundControl.corePlugin.options.flyView.showMapScale && !isViewer3DOpen && mapControl.pipState.state === mapControl.pipState.fullState
 

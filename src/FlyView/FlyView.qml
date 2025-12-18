@@ -18,15 +18,10 @@ import QtQuick.Window
 import QtQml.Models
 
 import QGroundControl
-
 import QGroundControl.Controls
-
 import QGroundControl.FlyView
 import QGroundControl.FlightMap
-
-
 import QGroundControl.UTMSP
-
 import QGroundControl.Viewer3D
 
 Item {
@@ -166,6 +161,7 @@ Item {
             anchors.right:      parent.right
             anchors.top:        parent.top
             anchors.bottom:     parent.bottom
+            anchors.topMargin:  toolbar.height
             z:                  QGroundControl.zOrderTopMost
             visible:            false
         }
