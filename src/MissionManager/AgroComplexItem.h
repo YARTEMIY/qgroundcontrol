@@ -27,14 +27,16 @@ public:
     /// @param flyView true: Created for use in the Fly View, false: Created for use in the Plan View
     /// @param kmlOrShpFile Polygon comes from this file, empty for default polygon
     AgroComplexItem(PlanMasterController* masterController, bool flyView, const QString& kmlOrShpFile);
-
+    Q_PROPERTY(Fact* isExclusionZone READ isExclusionZone CONSTANT)
     Q_PROPERTY(Fact*            gridAngle              READ gridAngle              CONSTANT)
     Q_PROPERTY(Fact*            flyAlternateTransects  READ flyAlternateTransects  CONSTANT)
     Q_PROPERTY(Fact*            splitConcavePolygons   READ splitConcavePolygons   CONSTANT)
+    Q_PROPERTY(Fact*            isExclusionZone        READ isExclusionZone        CONSTANT)
     Q_PROPERTY(QGeoCoordinate   centerCoordinate       READ centerCoordinate       WRITE setCenterCoordinate)
 
     Fact* gridAngle             (void) { return &_gridAngleFact; }
     Fact* flyAlternateTransects (void) { return &_flyAlternateTransectsFact; }
+    Fact* isExclusionZone       (void) { return &_isExclusionZoneFact; }
     Fact* splitConcavePolygons  (void) { return &_splitConcavePolygonsFact; }
 
     Q_INVOKABLE void rotateEntryPoint(void);
@@ -52,7 +54,7 @@ public:
 
     // Overrides from TransectStyleComplexItem
     void    save                (QJsonArray&  planItems) final;
-    bool    specifiesCoordinate (void) const final { return true; }
+    bool    specifiesCoordinate (void) const final { return !_isExclusionZoneFact.rawValue().toBool(); }
     double  timeBetweenShots    (void) final;
     void    appendMissionItems  (QList<MissionItem*>& items, QObject* missionItemParent);
     void    _appendVisualAction(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, MAV_FRAME frame, const QGeoCoordinate& coord);
@@ -76,6 +78,7 @@ public:
 
     static const QString name;
 
+    static constexpr const char* isExclusionZoneName =        "IsExclusionZone";
     static constexpr const char* jsonComplexItemTypeValue =   "agro";
     static constexpr const char* jsonV3ComplexItemTypeValue = "agro";
 
@@ -106,6 +109,7 @@ private:
     QPointF _rotatePoint(const QPointF& point, const QPointF& origin, double angle);
     void _intersectLinesWithRect(const QList<QLineF>& lineList, const QRectF& boundRect, QList<QLineF>& resultLines);
     void _intersectLinesWithPolygon(const QList<QLineF>& lineList, const QPolygonF& polygon, QList<QLineF>& resultLines);
+    QList<QLineF> _subtractPolygonFromLine(const QLineF& line, const QPolygonF& polygon);
     void _adjustLineDirection(const QList<QLineF>& lineList, QList<QLineF>& resultLines);
     bool _nextTransectCoord(const QList<QGeoCoordinate>& transectPoints, int pointIndex, QGeoCoordinate& coord);
     bool _appendMissionItemsWorker(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool hasRefly, bool buildRefly);
@@ -151,10 +155,12 @@ private:
     SettingsFact    _gridAngleFact;
     SettingsFact    _flyAlternateTransectsFact;
     SettingsFact    _splitConcavePolygonsFact;
+    SettingsFact    _isExclusionZoneFact;
     int             _entryPoint;
 
     static constexpr const char* _jsonGridAngleKey =          "angle";
     static constexpr const char* _jsonEntryPointKey =         "entryLocation";
+    static constexpr const char* _jsonIsExclusionZoneKey =    "isExclusionZone";
 
     static constexpr const char* _jsonV3GridObjectKey =                   "grid";
     static constexpr const char* _jsonV3GridAltitudeKey =                 "altitude";

@@ -24,6 +24,9 @@
 #include <QtCore/QJsonArray>
 #include <QtCore/QLineF>
 
+#include "MissionController.h"
+
+
 QGC_LOGGING_CATEGORY(AgroComplexItemLog, "Plan.AgroComplexItem")
 
 const QString AgroComplexItem::name(AgroComplexItem::tr("Agro"));
@@ -34,6 +37,7 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     , _gridAngleFact            (settingsGroup, _metaDataMap[gridAngleName])
     , _flyAlternateTransectsFact(settingsGroup, _metaDataMap[flyAlternateTransectsName])
     , _splitConcavePolygonsFact (settingsGroup, _metaDataMap[splitConcavePolygonsName])
+    , _isExclusionZoneFact      (settingsGroup, _metaDataMap[isExclusionZoneName])
     , _entryPoint               (EntryLocationTopLeft)
 {
     _editorQml = "qrc:/qml/QGroundControl/Controls/AgroItemEditor.qml";
@@ -51,11 +55,13 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     connect(&_gridAngleFact,            &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_flyAlternateTransectsFact,&Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_splitConcavePolygonsFact, &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
+    connect(&_isExclusionZoneFact,      &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(this,                       &AgroComplexItem::refly90DegreesChanged,  this, &AgroComplexItem::_setDirty);
 
     connect(&_gridAngleFact,            &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_flyAlternateTransectsFact,&Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_splitConcavePolygonsFact, &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
+    connect(&_isExclusionZoneFact,      &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(this,                       &AgroComplexItem::refly90DegreesChanged,  this, &AgroComplexItem::_rebuildTransects);
 
     connect(&_surveyAreaPolygon,        &QGCMapPolygon::isValidChanged,             this, &AgroComplexItem::_updateWizardMode);
@@ -123,6 +129,10 @@ void AgroComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* mi
         return;
     }
 
+    if (_isExclusionZoneFact.rawValue().toBool()) {
+        return;
+    }
+
     int seqNum = _sequenceNumber;
 
     // Определяем тип высоты
@@ -187,9 +197,12 @@ void AgroComplexItem::_saveCommon(QJsonObject& saveObject)
     saveObject[_jsonGridAngleKey] =                             _gridAngleFact.rawValue().toDouble();
     saveObject[_jsonFlyAlternateTransectsKey] =                 _flyAlternateTransectsFact.rawValue().toBool();
     saveObject[_jsonSplitConcavePolygonsKey] =                  _splitConcavePolygonsFact.rawValue().toBool();
+
+    // ДОБАВЛЕНО: Сохранение флага
+    saveObject[_jsonIsExclusionZoneKey] =                       _isExclusionZoneFact.rawValue().toBool();
+
     saveObject[_jsonEntryPointKey] =                            _entryPoint;
 
-    // Polygon shape
     _surveyAreaPolygon.saveToJson(saveObject);
 }
 
@@ -259,6 +272,7 @@ bool AgroComplexItem::_loadV4V5(const QJsonObject& complexObject, int sequenceNu
         { _jsonEntryPointKey,                           QJsonValue::Double, true },
         { _jsonGridAngleKey,                            QJsonValue::Double, true },
         { _jsonFlyAlternateTransectsKey,                QJsonValue::Bool,   false },
+
     };
 
     if(version == 5) {
@@ -295,6 +309,7 @@ bool AgroComplexItem::_loadV4V5(const QJsonObject& complexObject, int sequenceNu
 
     _gridAngleFact.setRawValue              (complexObject[_jsonGridAngleKey].toDouble());
     _flyAlternateTransectsFact.setRawValue  (complexObject[_jsonFlyAlternateTransectsKey].toBool(false));
+    _isExclusionZoneFact.setRawValue        (complexObject[_jsonIsExclusionZoneKey].toBool(false));
 
     if (version == 5) {
         _splitConcavePolygonsFact.setRawValue   (complexObject[_jsonSplitConcavePolygonsKey].toBool(true));
@@ -817,6 +832,51 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
     QList<QLineF> intersectLines;
 #if 1
     _intersectLinesWithPolygon(lineList, polygon, intersectLines);
+
+    QList<QPolygonF> exclusionPolygonsNED;
+
+    if (_masterController && _masterController->missionController()) {
+        QmlObjectListModel* items = _masterController->missionController()->visualItems();
+        for (int i = 0; i < items->count(); i++) {
+            AgroComplexItem* agroItem = qobject_cast<AgroComplexItem*>(items->get(i));
+            if (agroItem && agroItem != this) {
+                // Если найден другой AgroItem и он помечен как ExclusionZone
+                if (agroItem->isExclusionZone()->rawValue().toBool()) {
+                    // Проверяем валидность полигона
+                    if (agroItem->surveyAreaPolygon()->count() < 3) continue;
+
+                    // Конвертируем полигон препятствия в ту же систему NED, что и наш текущий полигон
+                    // Используем tangentOrigin текущего объекта (_surveyAreaPolygon.pathModel().value<...>(0))
+                    QPolygonF exPoly;
+                    for (int j=0; j< agroItem->surveyAreaPolygon()->count(); j++) {
+                        QGeoCoordinate geoVert = agroItem->surveyAreaPolygon()->vertexCoordinate(j);
+                        double y, x, down;
+                        QGCGeo::convertGeoToNed(geoVert, tangentOrigin, y, x, down);
+                        exPoly << QPointF(x, y);
+                    }
+                    exclusionPolygonsNED.append(exPoly);
+                }
+            }
+        }
+    }
+
+    // 2. Применяем вычитание (Clipping)
+    // intersectLines - это линии, которые УЖЕ обрезаны по границам разрешенной зоны (Inclusion)
+    // Теперь вырезаем из них зоны исключения (Exclusion)
+
+    QList<QLineF> clippedLines = intersectLines; // Начинаем с линий внутри поля
+
+    for (const QPolygonF& exPoly : exclusionPolygonsNED) {
+        QList<QLineF> newLinesForThisPass;
+        for (const QLineF& line : clippedLines) {
+            // Режем линию об текущий полигон препятствия
+            newLinesForThisPass += _subtractPolygonFromLine(line, exPoly);
+        }
+        clippedLines = newLinesForThisPass; // Обновляем список линий для следующего препятствия
+    }
+
+    intersectLines = clippedLines; // Заменяем оригинальные линии на обрезанные
+
 #else
     // This is handy for debugging grid problems, not for release
     intersectLines = lineList;
@@ -1457,4 +1517,64 @@ void AgroComplexItem::_updateWizardMode(void)
     if (_surveyAreaPolygon.isValid() && !_surveyAreaPolygon.traceMode()) {
         setWizardMode(false);
     }
+}
+
+
+QList<QLineF> AgroComplexItem::_subtractPolygonFromLine(const QLineF& line, const QPolygonF& polygon)
+{
+    QList<QLineF> resultLines;
+
+    // 1. Находим пересечения линии с гранями полигона
+    QList<QPointF> intersectionPoints;
+    intersectionPoints.append(line.p1()); // Начало отрезка
+    intersectionPoints.append(line.p2()); // Конец отрезка
+
+    for (int i = 0; i < polygon.count() - 1; i++) {
+        QLineF polyEdge(polygon[i], polygon[i+1]);
+        QPointF intersectPt;
+        if (line.intersects(polyEdge, &intersectPt) == QLineF::BoundedIntersection) {
+            intersectionPoints.append(intersectPt);
+        }
+    }
+    // Замыкающая грань
+    if (polygon.count() > 2) {
+        QLineF polyEdge(polygon.last(), polygon.first());
+        QPointF intersectPt;
+        if (line.intersects(polyEdge, &intersectPt) == QLineF::BoundedIntersection) {
+            intersectionPoints.append(intersectPt);
+        }
+    }
+
+    // 2. Сортируем точки вдоль линии (от p1 к p2)
+    std::sort(intersectionPoints.begin(), intersectionPoints.end(),
+        [&line](const QPointF& a, const QPointF& b) {
+            return QLineF(line.p1(), a).length() < QLineF(line.p1(), b).length();
+        });
+
+    // Убираем дубликаты (очень близкие точки)
+    for (int i = 1; i < intersectionPoints.size(); ) {
+        if (QLineF(intersectionPoints[i], intersectionPoints[i-1]).length() < 0.01) { // 1 см точность
+            intersectionPoints.removeAt(i);
+        } else {
+            i++;
+        }
+    }
+
+    // 3. Проверяем каждый сегмент: внутри он полигона или снаружи
+    for (int i = 0; i < intersectionPoints.count() - 1; i++) {
+        QPointF pA = intersectionPoints[i];
+        QPointF pB = intersectionPoints[i+1];
+        QLineF segment(pA, pB);
+
+        // Берем середину сегмента для проверки
+        QPointF midPoint = segment.pointAt(0.5);
+
+        // Если точка снаружи полигона (не содержится) - сохраняем сегмент
+        // QPolygonF::containsPoint возвращает true, если точка внутри.
+        if (!polygon.containsPoint(midPoint, Qt::OddEvenFill)) {
+            resultLines.append(segment);
+        }
+    }
+
+    return resultLines;
 }

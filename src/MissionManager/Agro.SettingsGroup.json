@@ -20,6 +20,12 @@
     "default":     false
 },
 {
+    "name":             "IsExclusionZone",
+    "shortDesc": "If true, this polygon acts as a keep-out zone for other Agro items.",
+    "type":             "bool",
+    "default":     false
+},
+{
     "name":             "SplitConcavePolygons",
     "shortDesc": "Split mission concave polygons into separate regular, convex polygons.",
     "type":             "bool",
