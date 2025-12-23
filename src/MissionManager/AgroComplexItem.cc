@@ -1125,7 +1125,7 @@ void AgroComplexItem::_rebuildTransectsFromPolygon(bool refly, const QPolygonF& 
 
     _adjustTransectsToEntryPointLocation(transects);
 
-    if (refly) {
+    if (!_transects.isEmpty()) {
         _optimizeTransectsForShortestDistance(_transects.last().last().coord, transects);
     }
 
@@ -1520,7 +1520,7 @@ void AgroComplexItem::_generateTransectsForPolygon(bool refly, const QPolygonF& 
 
     _adjustTransectsToEntryPointLocation(transects);
 
-    if (refly && !_transects.isEmpty()) {
+    if (!_transects.isEmpty()) {
         _optimizeTransectsForShortestDistance(_transects.last().last().coord, transects);
     }
 
