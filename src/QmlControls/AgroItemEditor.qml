@@ -40,6 +40,8 @@ TransectStyleComplexItemEditor {
                 fact:                   missionItem.gridAngle
                 Layout.fillWidth:       true
                 onUpdated:              angleSlider.value = missionItem.gridAngle.value
+                // Disable corner editing if this is an exclusion zone
+                enabled:                !missionItem.isExclusionZone.value
             }
 
             QGCSlider {
@@ -53,6 +55,8 @@ TransectStyleComplexItemEditor {
                 onValueChanged:         missionItem.gridAngle.value = value
                 Component.onCompleted:  value = missionItem.gridAngle.value
                 live: true
+                // Disable the slider if it is an exclusion zone
+                enabled:                !missionItem.isExclusionZone.value
             }
 
             QGCLabel {
@@ -63,6 +67,8 @@ TransectStyleComplexItemEditor {
                 Layout.fillWidth:   true
                 fact:               missionItem.turnAroundDistance
                 visible:            !forPresets
+                // Disable the field if it is an exclusion zone
+                enabled:            !missionItem.isExclusionZone.value
             }
 
             QGCOptionsComboBox {
@@ -71,6 +77,12 @@ TransectStyleComplexItemEditor {
                 visible:            !forPresets
 
                 model: [
+                    {
+                        text:       qsTr("Is Keep-Out Zone (Exclusion)"),
+                        fact:       missionItem.isExclusionZone,
+                        enabled:    true,
+                        visible:    true
+                    },
                     {
                         text:       qsTr("Hover and capture image"),
                         fact:       missionItem.hoverAndCapture,

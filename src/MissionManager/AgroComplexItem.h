@@ -44,7 +44,7 @@ public:
     // Overrides from ComplexMissionItem
     QString         patternName         (void) const final { return name; }
     bool            load                (const QJsonObject& complexObject, int sequenceNumber, QString& errorString) final;
-    QString         mapVisualQML        (void) const final { return QStringLiteral("SurveyMapVisual.qml"); }
+    QString         mapVisualQML        (void) const final { return QStringLiteral("AgroMapVisual.qml"); }
     QString         presetsSettingsGroup(void) { return settingsGroup; }
     void            savePreset          (const QString& name);
     void            loadPreset          (const QString& name);
@@ -136,7 +136,8 @@ private:
     void _rebuildTransectsFromPolygon(bool refly, const QPolygonF& polygon, const QGeoCoordinate& tangentOrigin, const QPointF* const transitionPoint);
 
     void _appendSprayerCommand(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool active);
-
+    static bool _ignoreGlobalUpdate;
+    void _updateOtherAgroItems();
 #if 0
     // Splitting polygons is not supported since this code would get stuck in a infinite loop
     // Code is left here in case someone wants to try to resurrect it
