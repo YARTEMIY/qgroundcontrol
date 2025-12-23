@@ -809,11 +809,27 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
                 if (!exPoly.isClosed()) exPoly << exPoly.first();
                 exclusionPolygonsNED.append(exPoly);
 
-                // If this is a circle and its center is inside the field — add Y to the list of sections
+                // LOGIC FOR DETERMINING CUT POINTS
                 QPointF center;
                 if (_isPolygonCircle(exPoly, center)) {
+                    // Case 2: For a circle, the center is enough if it is inside
                     if (mainPolygonNED.containsPoint(center, Qt::OddEvenFill)) {
                         splitYCoords.append(center.y());
+                    }
+                } else {
+                    // Case 3: Для многоугольника берем Y-координаты ВСЕХ его вершин, которые внутри поля
+                    bool hasInternalVertex = false;
+                    for (const QPointF& vertex : exPoly) {
+                        if (mainPolygonNED.containsPoint(vertex, Qt::OddEvenFill)) {
+                            splitYCoords.append(vertex.y());
+                            hasInternalVertex = true;
+                        }
+                    }
+                    // If the polygon is inside but vertices are on the boundary,
+                    // add at least the top and bottom points of its bounding rectangle
+                    if (!hasInternalVertex && mainPolygonNED.boundingRect().intersects(exPoly.boundingRect())) {
+                         splitYCoords.append(exPoly.boundingRect().top());
+                         splitYCoords.append(exPoly.boundingRect().bottom());
                     }
                 }
             }
@@ -822,43 +838,41 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
 
     // Generating paths
     if (!splitYCoords.isEmpty()) {
-        // --- CASE 2: Working with multiple sections ---
-
         // Sort coordinates from "North" to "South" (along the Y axis in NED)
         std::sort(splitYCoords.begin(), splitYCoords.end());
 
         // Removing duplicates (if the circles are on the same line)
+
         splitYCoords.erase(std::unique(splitYCoords.begin(), splitYCoords.end(),
-            [](double a, double b){ return qAbs(a - b) < 1.0; }), splitYCoords.end());
+            [](double a, double b){ return qAbs(a - b) < 2.0; }), splitYCoords.end());
 
         QRectF br = mainPolygonNED.boundingRect();
         double currentTopY = br.top() - 100.0; //We start just above the upper limit
 
         // Cutting the field into stripso strips
         for (double splitY : splitYCoords) {
-            // Create a bounding rectangle for the current strip
-            QRectF stripRect(br.left() - 1000.0, currentTopY, br.width() + 2000.0, splitY - currentTopY);
+            // We skip cuts that go beyond the boundaries of the current field
+            if (splitY <= currentTopY + 1.0) continue;
+            if (splitY >= br.bottom() - 1.0) continue;
 
-            // We use the QPolygonF(stripRect) constructor
+            QRectF stripRect(br.left() - 1000.0, currentTopY, br.width() + 2000.0, splitY - currentTopY);
             QPolygonF stripPolygon = mainPolygonNED.intersected(QPolygonF(stripRect));
 
-            if (!stripPolygon.isEmpty()) {
+            if (!stripPolygon.isEmpty() && stripPolygon.boundingRect().height() > 1.0) {
                 _generateTransectsForPolygon(refly, stripPolygon, tangentOrigin, exclusionPolygonsNED);
             }
             currentTopY = splitY;
         }
 
-        // We process the last segment (from the last circle to the bottom of the field)
+        // Final bottom segment
         QRectF finalRect(br.left() - 1000.0, currentTopY, br.width() + 2000.0, (br.bottom() + 100.0) - currentTopY);
-
         QPolygonF finalPolygon = mainPolygonNED.intersected(QPolygonF(finalRect));
-
-        if (!finalPolygon.isEmpty()) {
+        if (!finalPolygon.isEmpty() && finalPolygon.boundingRect().height() > 1.0) {
             _generateTransectsForPolygon(refly, finalPolygon, tangentOrigin, exclusionPolygonsNED);
         }
     }
     else {
-        // --- CASE 1: Standard algorithm (there are no circles inside or they are on the edge) ---
+        // Standard algorithm (Case 1)
         _generateTransectsForPolygon(refly, mainPolygonNED, tangentOrigin, exclusionPolygonsNED);
     }
 }
