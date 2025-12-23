@@ -138,6 +138,13 @@ private:
     void _appendSprayerCommand(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool active);
     static bool _ignoreGlobalUpdate;
     void _updateOtherAgroItems();
+    bool _isPolygonCircle(const QPolygonF& polygon, QPointF& center);
+    void _generateTransectsForPolygon(bool refly,
+                                      const QPolygonF& polygon,
+                                      const QGeoCoordinate& tangentOrigin,
+                                      const QList<QPolygonF>& exclusionPolygons);
+    QList<QPolygonF> _splitPolygonHorizontal(const QPolygonF& polygon, double splitY);
+
 #if 0
     // Splitting polygons is not supported since this code would get stuck in a infinite loop
     // Code is left here in case someone wants to try to resurrect it
