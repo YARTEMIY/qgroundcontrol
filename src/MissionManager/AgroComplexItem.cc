@@ -201,7 +201,7 @@ void AgroComplexItem::_saveCommon(QJsonObject& saveObject)
     saveObject[_jsonFlyAlternateTransectsKey] =                 _flyAlternateTransectsFact.rawValue().toBool();
     saveObject[_jsonSplitConcavePolygonsKey] =                  _splitConcavePolygonsFact.rawValue().toBool();
 
-    // ДОБАВЛЕНО: Сохранение флага
+    // Saving the flag
     saveObject[_jsonIsExclusionZoneKey] =                       _isExclusionZoneFact.rawValue().toBool();
 
     saveObject[_jsonEntryPointKey] =                            _entryPoint;
@@ -866,18 +866,18 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
     }
 
     if (!exclusionPolygonsNED.isEmpty()) {
-    QList<QLineF> clippedLines = intersectLines; // Начинаем с линий внутри поля
+    QList<QLineF> clippedLines = intersectLines; // We start with the lines inside the field
 
         for (const QPolygonF& exPoly : exclusionPolygonsNED) {
             QList<QLineF> newLinesForThisPass;
 
             for (const QLineF& line : clippedLines) {
-            // Режем линию об текущий полигон препятствия
+            // Cutting a line against the current obstacle polygon
                 newLinesForThisPass += _subtractPolygonFromLine(line, exPoly);
             }
-        clippedLines = newLinesForThisPass; // Обновляем список линий для следующего препятствия
+        clippedLines = newLinesForThisPass; // Update the list of lines for the next obstacle
         }
-    intersectLines = clippedLines; // Заменяем оригинальные линии на обрезанные
+    intersectLines = clippedLines; // Replace the original lines with trimmed ones
     }
 #else
     // This is handy for debugging grid problems, not for release
@@ -1526,17 +1526,17 @@ QList<QLineF> AgroComplexItem::_subtractPolygonFromLine(const QLineF& line, cons
 {
     QList<QLineF> resultLines;
 
-    // Если линия полностью ВНУТРИ полигона (препятствия), возвращаем пустой список (полностью удаляем)
-    // Проверяем концы и середину
+    // If the line is completely inside the polygon (obstacle), return an empty list (remove completely)
+    // Check the ends and middle
     if (polygon.containsPoint(line.p1(), Qt::OddEvenFill) &&
         polygon.containsPoint(line.p2(), Qt::OddEvenFill)) {
-        return resultLines; // Линия поглощена
+        return resultLines; // The line is absorbed
     }
 
-    // 1. Находим пересечения
+    // Finding intersections
     QList<QPointF> intersectionPoints;
-    intersectionPoints.append(line.p1()); // Начало отрезка
-    intersectionPoints.append(line.p2()); // Конец отрезка
+    intersectionPoints.append(line.p1()); // Beginning of the segment
+    intersectionPoints.append(line.p2()); // End of the segment
 
     for (int i = 0; i < polygon.count() - 1; i++) {
         QLineF polyEdge(polygon[i], polygon[i+1]);
@@ -1545,7 +1545,7 @@ QList<QLineF> AgroComplexItem::_subtractPolygonFromLine(const QLineF& line, cons
             intersectionPoints.append(intersectPt);
         }
     }
-        // Замыкающая грань
+        // Closing edge
     if (polygon.count() > 2) {
         QLineF polyEdge(polygon.last(), polygon.first());
         QPointF intersectPt;
@@ -1554,34 +1554,34 @@ QList<QLineF> AgroComplexItem::_subtractPolygonFromLine(const QLineF& line, cons
         }
     }
 
-    // 2. Сортируем точки вдоль линии (от p1 к p2)
+    // 2. Sort points along the line (from p1 to p2)
     std::sort(intersectionPoints.begin(), intersectionPoints.end(),
         [&line](const QPointF& a, const QPointF& b) {
             return QLineF(line.p1(), a).length() < QLineF(line.p1(), b).length();
         });
 
-    // Убираем дубликаты (очень близкие точки)
+    // Removing duplicates (very close points)
     for (int i = 1; i < intersectionPoints.size(); ) {
-        if (QLineF(intersectionPoints[i], intersectionPoints[i-1]).length() < 0.05) { // Чуть увеличил порог (5см)
+        if (QLineF(intersectionPoints[i], intersectionPoints[i-1]).length() < 0.05) { // Slightly increased the threshold (5cm)
             intersectionPoints.removeAt(i);
         } else {
             i++;
         }
     }
 
-    // 3. Проверяем каждый сегмент: внутри он полигона или снаружи
+    // We check each segment: is it inside the polygon or outside
     for (int i = 0; i < intersectionPoints.count() - 1; i++) {
         QPointF pA = intersectionPoints[i];
         QPointF pB = intersectionPoints[i+1];
         QLineF segment(pA, pB);
 
-        // Если длина сегмента слишком мала, игнорируем
+        // If the length of the segment is too small, ignore it
         if (segment.length() < 0.1) continue;
 
         QPointF midPoint = segment.pointAt(0.5);
 
-        // Если точка снаружи полигона (не содержится) - сохраняем сегмент
-        // QPolygonF::containsPoint возвращает true, если точка внутри.
+        // If the point is outside the polygon (not contained) - save the segment
+        // QPolygonF::containsPoint returns true if the point is inside.
         if (!polygon.containsPoint(midPoint, Qt::OddEvenFill)) {
             resultLines.append(segment);
         }
@@ -1596,20 +1596,20 @@ void AgroComplexItem::_updateOtherAgroItems()
         return;
     }
 
-    // Если мы не контроллер или нет списка элементов, выходим
+    // If we are not the controller or there is no list of items, exit
     if (!_masterController || !_masterController->missionController()) {
         return;
     }
 
-    // Ставим флаг блокировки, чтобы не уйти в бесконечную рекурсию
+    // Set a lock flag to prevent falling into an infinite recursion
     _ignoreGlobalUpdate = true;
 
     QmlObjectListModel* items = _masterController->missionController()->visualItems();
     for (int i = 0; i < items->count(); i++) {
         AgroComplexItem* agroItem = qobject_cast<AgroComplexItem*>(items->get(i));
-        // Если это другой AgroItem (не мы сами) и он НЕ является зоной исключения (т.е. это поле, которое надо пересчитать)
+        // If this is another AgroItem (not ourselves) and it is NOT an exclusion zone (i.e. it's a field that needs to be recalculated)
         if (agroItem && agroItem != this && !agroItem->isExclusionZone()->rawValue().toBool()) {
-            // Принудительно вызываем пересчет
+            // Force a recalculation
             agroItem->_rebuildTransects();
         }
     }
