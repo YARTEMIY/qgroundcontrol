@@ -642,45 +642,29 @@ void AgroComplexItem::_intersectLinesWithRect(const QList<QLineF>& lineList, con
 void AgroComplexItem::_intersectLinesWithPolygon(const QList<QLineF>& lineList, const QPolygonF& polygon, QList<QLineF>& resultLines)
 {
     resultLines.clear();
-
-    for (int i=0; i<lineList.count(); i++) {
-        const QLineF& line = lineList[i];
+    for (const QLineF& line : lineList) {
         QList<QPointF> intersections;
+        intersections.append(line.p1());
+        intersections.append(line.p2());
 
-        // Intersect the line with all the polygon edges
-        for (int j=0; j<polygon.count()-1; j++) {
-            QPointF intersectPoint;
-            QLineF polygonLine = QLineF(polygon[j], polygon[j+1]);
-
-            auto intersect = line.intersects(polygonLine, &intersectPoint);
-            if (intersect == QLineF::BoundedIntersection) {
-                if (!intersections.contains(intersectPoint)) {
-                    intersections.append(intersectPoint);
-                }
+        for (int j = 0; j < polygon.count() - 1; j++) {
+            QPointF p;
+            if (line.intersects(QLineF(polygon[j], polygon[j+1]), &p) == QLineF::BoundedIntersection) {
+                if (!intersections.contains(p)) intersections.append(p);
             }
         }
 
-        // We now have one or more intersection points all along the same line. Find the two
-        // which are furthest away from each other to form the transect.
-        if (intersections.count() > 1) {
-            QPointF firstPoint;
-            QPointF secondPoint;
-            double currentMaxDistance = 0;
+        std::sort(intersections.begin(), intersections.end(), [&](const QPointF& a, const QPointF& b) {
+            return QLineF(line.p1(), a).length() < QLineF(line.p1(), b).length();
+        });
 
-            for (int i=0; i<intersections.count(); i++) {
-                for (int j=0; j<intersections.count(); j++) {
-                    QLineF lineTest(intersections[i], intersections[j]);
-                    \
-                    double newMaxDistance = lineTest.length();
-                    if (newMaxDistance > currentMaxDistance) {
-                        firstPoint = intersections[i];
-                        secondPoint = intersections[j];
-                        currentMaxDistance = newMaxDistance;
-                    }
-                }
+        for (int i = 0; i < intersections.count() - 1; i++) {
+            QLineF segment(intersections[i], intersections[i+1]);
+            if (segment.length() < 0.1) continue;
+            // Проверяем, что середина сегмента внутри рабочего полигона
+            if (polygon.containsPoint(segment.pointAt(0.5), Qt::OddEvenFill)) {
+                resultLines.append(segment);
             }
-
-            resultLines += QLineF(firstPoint, secondPoint);
         }
     }
 }
@@ -1323,68 +1307,28 @@ void AgroComplexItem::_updateWizardMode(void)
 QList<QLineF> AgroComplexItem::_subtractPolygonFromLine(const QLineF& line, const QPolygonF& polygon)
 {
     QList<QLineF> resultLines;
-
-    // If the line is completely inside the polygon (obstacle), return an empty list (remove completely)
-    // Check the ends and middle
-    if (polygon.containsPoint(line.p1(), Qt::OddEvenFill) &&
-        polygon.containsPoint(line.p2(), Qt::OddEvenFill)) {
-        return resultLines; // The line is absorbed
-    }
-
-    // 1. Finding intersections
-    QList<QPointF> intersectionPoints;
-    intersectionPoints.append(line.p1()); // Beginning of the segment
-    intersectionPoints.append(line.p2()); // End of segment
+    QList<QPointF> points;
+    points << line.p1() << line.p2();
 
     for (int i = 0; i < polygon.count() - 1; i++) {
-        QLineF polyEdge(polygon[i], polygon[i+1]);
-        QPointF intersectPt;
-        if (line.intersects(polyEdge, &intersectPt) == QLineF::BoundedIntersection) {
-            intersectionPoints.append(intersectPt);
-        }
-    }
-        // Closing edge
-    if (polygon.count() > 2) {
-        QLineF polyEdge(polygon.last(), polygon.first());
-        QPointF intersectPt;
-        if (line.intersects(polyEdge, &intersectPt) == QLineF::BoundedIntersection) {
-            intersectionPoints.append(intersectPt);
+        QPointF p;
+        if (line.intersects(QLineF(polygon[i], polygon[i+1]), &p) == QLineF::BoundedIntersection) {
+            points << p;
         }
     }
 
-    // 2. Sort points along the line (from p1 to p2)
-    std::sort(intersectionPoints.begin(), intersectionPoints.end(),
-        [&line](const QPointF& a, const QPointF& b) {
-            return QLineF(line.p1(), a).length() < QLineF(line.p1(), b).length();
-        });
+    std::sort(points.begin(), points.end(), [&](const QPointF& a, const QPointF& b) {
+        return QLineF(line.p1(), a).length() < QLineF(line.p1(), b).length();
+    });
 
-    // Removing duplicates (very close points)
-    for (int i = 1; i < intersectionPoints.size(); ) {
-        if (QLineF(intersectionPoints[i], intersectionPoints[i-1]).length() < 0.05) { // Чуть увеличил порог (5см)
-            intersectionPoints.removeAt(i);
-        } else {
-            i++;
+    for (int i = 0; i < points.count() - 1; i++) {
+        QLineF seg(points[i], points[i+1]);
+        if (seg.length() < 0.1) continue;
+        // If the middle of the segment is INSIDE the forbidden zone, throw it out
+        if (!polygon.containsPoint(seg.pointAt(0.5), Qt::WindingFill)) {
+            resultLines.append(seg);
         }
     }
-
-    // We check each segment: is it inside the polygon or outside
-    for (int i = 0; i < intersectionPoints.count() - 1; i++) {
-        QPointF pA = intersectionPoints[i];
-        QPointF pB = intersectionPoints[i+1];
-        QLineF segment(pA, pB);
-
-        // If the length of the segment is too small, ignore it
-        if (segment.length() < 0.1) continue;
-
-        QPointF midPoint = segment.pointAt(0.5);
-
-        // If the point is outside the polygon (not contained) - save the segment
-        // QPolygonF::containsPoint returns true if the point is inside.
-        if (!polygon.containsPoint(midPoint, Qt::OddEvenFill)) {
-            resultLines.append(segment);
-        }
-    }
-
     return resultLines;
 }
 
@@ -1558,7 +1502,84 @@ void AgroComplexItem::_generateTransectsForPolygon(bool refly, const QPolygonF& 
             turnaroundOut.setAltitude(qQNaN());
             coordInfoTransect.append((TransectStyleComplexItem::CoordInfo_t){ turnaroundOut, CoordTypeTurnaround });
         }
+        if (!_transects.isEmpty()) {
+            _appendBypassIfNecessary(_transects.last().last().coord, coordInfoTransect.first().coord, tangentOrigin, exclusionPolygons);
+        }
 
         _transects.append(coordInfoTransect);
+    }
+}
+
+void AgroComplexItem::_appendBypassIfNecessary(const QGeoCoordinate& start, const QGeoCoordinate& end, const QGeoCoordinate& tangentOrigin, const QList<QPolygonF>& exclusionPolygons)
+{
+    if (exclusionPolygons.isEmpty()) return;
+
+    double y1, x1, y2, x2, d;
+    QGCGeo::convertGeoToNed(start, tangentOrigin, y1, x1, d);
+    QGCGeo::convertGeoToNed(end, tangentOrigin, y2, x2, d);
+    QLineF path(x1, y1, x2, y2);
+
+    for (const QPolygonF& poly : exclusionPolygons) {
+        // We check whether the path is blocked (does it intersect the edges OR the middle inside)
+        bool intersects = false;
+        for (int i = 0; i < poly.count() - 1; i++) {
+            if (path.intersects(QLineF(poly[i], poly[i+1]), nullptr) == QLineF::BoundedIntersection) {
+                intersects = true; break;
+            }
+        }
+
+        if (!intersects && !poly.containsPoint(path.center(), Qt::WindingFill)) continue;
+
+        // Find all entry/exit points + current ends, if they are inside
+        QList<QPointF> pts;
+        if (poly.containsPoint(path.p1(), Qt::WindingFill)) pts << path.p1();
+        if (poly.containsPoint(path.p2(), Qt::WindingFill)) pts << path.p2();
+
+        for (int i = 0; i < poly.count() - 1; i++) {
+            QPointF p;
+            if (path.intersects(QLineF(poly[i], poly[i+1]), &p) == QLineF::BoundedIntersection) pts << p;
+        }
+
+        if (pts.count() < 2) continue;
+
+        std::sort(pts.begin(), pts.end(), [&](const QPointF& a, const QPointF& b) {
+            return QLineF(path.p1(), a).length() < QLineF(path.p1(), b).length();
+        });
+
+        // We take the extreme points of the “problem” area on the border or inside the zone
+        QPointF pIn = pts.first();
+        QPointF pOut = pts.last();
+
+        // Finding the nearest vertex indices to traverse
+        int i1 = -1, i2 = -1;
+        double d1 = 1e10, d2 = 1e10;
+        for(int i=0; i<poly.count()-1; i++) {
+            double dist1 = QLineF(pIn, poly[i]).length();
+            if(dist1 < d1) { d1 = dist1; i1 = i; }
+            double dist2 = QLineF(pOut, poly[i]).length();
+            if(dist2 < d2) { d2 = dist2; i2 = i; }
+        }
+
+        auto getPath = [&](bool cw) {
+            QList<QPointF> r; r << pIn;
+            int cur = i1;
+            while(cur != i2) {
+                r << poly[cur];
+                cur = cw ? (cur + 1) % (poly.count()-1) : (cur - 1 + (poly.count()-1)) % (poly.count()-1);
+            }
+            r << poly[i2] << pOut;
+            return r;
+        };
+
+        auto pathCW = getPath(true), pathCCW = getPath(false);
+        auto dist = [](const QList<QPointF>& l) { double s=0; for(int i=0; i<l.size()-1; i++) s += QLineF(l[i], l[i+1]).length(); return s; };
+
+        QList<TransectStyleComplexItem::CoordInfo_t> bypass;
+        for(const QPointF& pt : (dist(pathCW) < dist(pathCCW) ? pathCW : pathCCW)) {
+            QGeoCoordinate c; QGCGeo::convertNedToGeo(pt.y(), pt.x(), 0, tangentOrigin, c);
+            bypass << (TransectStyleComplexItem::CoordInfo_t){c, CoordTypeInteriorHoverTrigger};
+        }
+        _transects.append(bypass);
+        return;
     }
 }

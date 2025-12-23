@@ -144,6 +144,7 @@ private:
                                       const QGeoCoordinate& tangentOrigin,
                                       const QList<QPolygonF>& exclusionPolygons);
     QList<QPolygonF> _splitPolygonHorizontal(const QPolygonF& polygon, double splitY);
+    void _appendBypassIfNecessary(const QGeoCoordinate& start, const QGeoCoordinate& end, const QGeoCoordinate& tangentOrigin, const QList<QPolygonF>& exclusionPolygons);
 
 #if 0
     // Splitting polygons is not supported since this code would get stuck in a infinite loop
