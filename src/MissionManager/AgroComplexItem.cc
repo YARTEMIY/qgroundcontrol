@@ -28,6 +28,7 @@
 
 #include <algorithm>
 
+#include "clipper.hpp"
 bool AgroComplexItem::_ignoreGlobalUpdate = false;
 
 QGC_LOGGING_CATEGORY(AgroComplexItemLog, "Plan.AgroComplexItem")
@@ -1390,6 +1391,11 @@ QList<QPolygonF> AgroComplexItem::_splitPolygonHorizontal(const QPolygonF& polyg
 
 void AgroComplexItem::_generateTransectsForPolygon(bool refly, const QPolygonF& polygon, const QGeoCoordinate& tangentOrigin, const QList<QPolygonF>& exclusionPolygons)
 {
+
+    double safetyMargin = 2.0;
+    QList<QPolygonF> inflatedExclusions;
+
+    _inflateExclusionZones(exclusionPolygons, safetyMargin, inflatedExclusions);
     // Calculation of mesh parameters
     double gridAngle = _gridAngleFact.rawValue().toDouble();
     double gridSpacing = _cameraCalc.adjustedFootprintSide()->rawValue().toDouble();
@@ -1581,5 +1587,52 @@ void AgroComplexItem::_appendBypassIfNecessary(const QGeoCoordinate& start, cons
         }
         _transects.append(bypass);
         return;
+    }
+}
+
+
+void AgroComplexItem::_inflateExclusionZones(const QList<QPolygonF>& exclusionPolygonsNED, double marginMeters, QList<QPolygonF>& inflatedPolygonsNED)
+{
+    inflatedPolygonsNED.clear();
+    if (marginMeters <= 0) {
+        inflatedPolygonsNED = exclusionPolygonsNED;
+        return;
+    }
+
+    // Scaling factor to go from double (meters) to ClipperLib::cInt (millimeters)
+    const double scale = 1000.0;
+
+    for (const QPolygonF& polygon : exclusionPolygonsNED) {
+        ClipperLib::Path path;
+        for (const QPointF& pt : polygon) {
+            path.push_back(ClipperLib::IntPoint(
+                static_cast<ClipperLib::cInt>(pt.x() * scale),
+                static_cast<ClipperLib::cInt>(pt.y() * scale)
+            ));
+        }
+
+        ClipperLib::ClipperOffset offsetter;
+        // jtRound gives rounded corners, which is better for smooth flight
+        offsetter.AddPath(path, ClipperLib::jtRound, ClipperLib::etClosedPolygon);
+
+        ClipperLib::Paths solution;
+        // A positive value expands the polygon outward
+        offsetter.Execute(solution, marginMeters * scale);
+
+        // Convert back to QPolygonF
+        for (const ClipperLib::Path& outPath : solution) {
+            QPolygonF inflatedPoly;
+            for (const ClipperLib::IntPoint& pt : outPath) {
+                inflatedPoly << QPointF(
+                    static_cast<double>(pt.X) / scale,
+                    static_cast<double>(pt.Y) / scale
+                );
+            }
+            // Closing the polygon
+            if (!inflatedPoly.isEmpty()) {
+                inflatedPoly << inflatedPoly.first();
+            }
+            inflatedPolygonsNED.append(inflatedPoly);
+        }
     }
 }
