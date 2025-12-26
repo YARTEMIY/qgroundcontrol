@@ -70,54 +70,26 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
 
 void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool active)
 {
-    float servoInstance = 5.0f;
-    float turnOn = 1900.0f;
-    float turnOff = 1100.0f;
+    float turnOn = 1.0f;
+    float turnOff = -1.0f;
 
-    float pwmValue = active ? 1900.0f : 1100.0f;
+    float actuatorValue = active ? turnOn : turnOff;
 
     MissionItem* item = new MissionItem(seqNum++,
-                                        MAV_CMD_DO_SET_SERVO,
+                                        MAV_CMD_DO_SET_ACTUATOR,
                                         MAV_FRAME_MISSION,
-                                        servoInstance,  // Param 1: Номер сервопривода (Instance/Channel)
-                                        pwmValue,       // Param 2: PWM (микросекунды)
-                                        0,              // Param 3: (не используется)
-                                        0, 0, 0, 0,     // Param 4-7
-                                        true,           // autoContinue
-                                        false,          // isCurrentItem
-                                        missionItemParent);
-    items.append(item);
-}
-
-void AgroComplexItem::_appendVisualAction(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, MAV_FRAME frame, const QGeoCoordinate& coord)
-{
-    // === ВИЗУАЛЬНЫЙ ТЕСТ: "ПРЫЖОК" ===
-
-    // 1. Берем текущую высоту и добавляем 10 метров
-    double jumpAltitude = coord.altitude() + 10.0;
-
-    // 2. Время зависания в верхней точке (в секундах)
-    float holdTime = 5.0f;
-
-    MissionItem* item = new MissionItem(seqNum++,
-                                        MAV_CMD_NAV_WAYPOINT, // Стандартная команда полета (поддерживается 100%)
-                                        frame,
-                                        holdTime,       // Param 1: Время ожидания (Hold time)
-                                        0,              // Param 2: Радиус (0 = по умолчанию)
-                                        0,              // Param 3: Pass Radius
-                                        0,              // Param 4: Yaw (0 = не менять)
-                                        coord.latitude(),  // Param 5: Та же широта
-                                        coord.longitude(), // Param 6: Та же долгота
-                                        jumpAltitude,      // Param 7: НОВАЯ ВЫСОТА (+10м)
-                                        true,           // autoContinue
-                                        false,          // isCurrentItem
+                                        0,
+                                        0,
+                                        actuatorValue,
+                                        0, 0, 0, 0,
+                                        true,
+                                        false,
                                         missionItemParent);
     items.append(item);
 }
 
 void AgroComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* missionItemParent)
 {
-    // Если миссия загружена из файла - используем родительскую логику загрузки
     if (_loadedMissionItems.count()) {
         TransectStyleComplexItem::appendMissionItems(items, missionItemParent);
         return;
@@ -125,8 +97,8 @@ void AgroComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* mi
 
     int seqNum = _sequenceNumber;
 
-    // Определяем тип высоты
     MAV_FRAME mavFrame = MAV_FRAME_GLOBAL_RELATIVE_ALT;
+    _appendSprayerCommand(items, missionItemParent, seqNum, false);
     if (_cameraCalc.distanceMode() == QGroundControlQmlGlobal::AltitudeModeAbsolute ||
         _cameraCalc.distanceMode() == QGroundControlQmlGlobal::AltitudeModeCalcAboveTerrain) {
         mavFrame = MAV_FRAME_GLOBAL;
@@ -134,24 +106,17 @@ void AgroComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* mi
         mavFrame = MAV_FRAME_GLOBAL_TERRAIN_ALT;
     }
 
-    // Проходим по рассчитанным точкам (они доступны, т.к. protected в родителе)
     for (int i = 0; i < _rgFlightPathCoordInfo.count(); i++) {
         const CoordInfo_t& coordInfo = _rgFlightPathCoordInfo[i];
 
-        // Используем метод родителя для добавления точки полета
-        // (он protected, поэтому доступен нам здесь)
         _appendWaypoint(items, missionItemParent, seqNum, mavFrame, 0, coordInfo.coord);
 
-        // Добавляем логику опрыскивателя
         switch (coordInfo.coordType) {
             case CoordTypeSurveyEntry:
-                // Включаем ПОСЛЕ прилета в точку входа
                 _appendSprayerCommand(items, missionItemParent, seqNum, true);
-                // _appendVisualAction(items, missionItemParent, seqNum, mavFrame, coordInfo.coord);
                 break;
 
             case CoordTypeSurveyExit:
-                // Выключаем ПОСЛЕ прилета в точку выхода
                 _appendSprayerCommand(items, missionItemParent, seqNum, false);
                 break;
 
