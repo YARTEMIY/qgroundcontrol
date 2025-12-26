@@ -35,6 +35,35 @@ QGC_LOGGING_CATEGORY(AgroComplexItemLog, "Plan.AgroComplexItem")
 
 const QString AgroComplexItem::name(AgroComplexItem::tr("Agro"));
 
+const double ClipperScale = 1000.0; // Millimeter accuracy for meters (NED)
+
+ClipperLib::Path AgroComplexItem::_toClipperPath(const QPolygonF& poly) const {
+    ClipperLib::Path path;
+    for (const QPointF& pt : poly) {
+        path.push_back(ClipperLib::IntPoint(
+            static_cast<ClipperLib::cInt>(std::round(pt.x() * _clipperScale)),
+            static_cast<ClipperLib::cInt>(std::round(pt.y() * _clipperScale))
+        ));
+    }
+    return path;
+}
+
+QPolygonF AgroComplexItem::_fromClipperPath(const ClipperLib::Path& path) const {
+    QPolygonF poly;
+    for (const ClipperLib::IntPoint& pt : path) {
+        poly << QPointF(static_cast<double>(pt.X) / _clipperScale,
+                        static_cast<double>(pt.Y) / _clipperScale);
+    }
+    if (!poly.isEmpty() && poly.first() != poly.last()) poly << poly.first();
+    return poly;
+}
+
+QGeoCoordinate AgroComplexItem::_toGeo(const QPointF& pt, const QGeoCoordinate& origin) {
+    QGeoCoordinate coord;
+    QGCGeo::convertNedToGeo(pt.y(), pt.x(), 0, origin, coord);
+    return coord;
+}
+
 AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool flyView, const QString& kmlOrShpFile)
     : TransectStyleComplexItem  (masterController, flyView, settingsGroup)
     , _metaDataMap              (FactMetaData::createMapFromJsonFile(QStringLiteral(":/json/Agro.SettingsGroup.json"), this))
@@ -733,287 +762,136 @@ void AgroComplexItem::_rebuildTransectsPhase1(void)
     }
 }
 
-void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
-{
-    if (_ignoreRecalc) {
-        return;
-    }
+void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly) {
+    if (_ignoreRecalc || _surveyAreaPolygon.count() < 3) return;
 
-    if (_loadedMissionItemsParent) {
-        _loadedMissionItems.clear();
-        _loadedMissionItemsParent->deleteLater();
-        _loadedMissionItemsParent = nullptr;
-    }
-
-    if (_isExclusionZoneFact.rawValue().toBool()) {
-        _transects.clear();
-        _updateOtherAgroItems();
-        return;
-    }
-
-    if (_surveyAreaPolygon.count() < 3) {
-        return;
-    }
-
-    // Preparing Field Geometry (NED)
-    QList<QPointF> polygonPoints;
     QGeoCoordinate tangentOrigin = _surveyAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(0)->coordinate();
 
+    QPolygonF mainPolyNED;
     for (int i=0; i<_surveyAreaPolygon.count(); i++) {
-        double y, x, down;
-        QGeoCoordinate vertex = _surveyAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(i)->coordinate();
-        if (i == 0) {
-            x = y = 0;
-        } else {
-            QGCGeo::convertGeoToNed(vertex, tangentOrigin, y, x, down);
-        }
-        polygonPoints += QPointF(x, y);
+        double y, x, d; QGCGeo::convertGeoToNed(_surveyAreaPolygon.vertexCoordinate(i), tangentOrigin, y, x, d);
+        mainPolyNED << QPointF(x, y);
     }
 
-    QPolygonF mainPolygonNED;
-    for (int i=0; i<polygonPoints.count(); i++) mainPolygonNED << polygonPoints[i];
-    if (!mainPolygonNED.isClosed()) mainPolygonNED << polygonPoints[0];
-
-    // Collecting exclusion zones and searching for "inner" circles to divide
-    QList<QPolygonF> exclusionPolygonsNED;
-    QList<double> splitYCoords; // List of all latitudes for the section
+    ClipperLib::Paths clipPaths;         // Для Clipper
+    QList<QPolygonF> exclusionPolysNED; // ДЛЯ ГЕНЕРАТОРА (Qt формат)
 
     if (_masterController && _masterController->missionController()) {
         QmlObjectListModel* items = _masterController->missionController()->visualItems();
         for (int i = 0; i < items->count(); i++) {
             AgroComplexItem* agroItem = qobject_cast<AgroComplexItem*>(items->get(i));
             if (agroItem && agroItem != this && agroItem->isExclusionZone()->rawValue().toBool()) {
-                if (agroItem->surveyAreaPolygon()->count() < 3) continue;
-
                 QPolygonF exPoly;
                 for (int j=0; j < agroItem->surveyAreaPolygon()->count(); j++) {
-                    double y, x, down;
-                    QGCGeo::convertGeoToNed(agroItem->surveyAreaPolygon()->vertexCoordinate(j), tangentOrigin, y, x, down);
+                    double y, x, d; QGCGeo::convertGeoToNed(agroItem->surveyAreaPolygon()->vertexCoordinate(j), tangentOrigin, y, x, d);
                     exPoly << QPointF(x, y);
                 }
-                if (!exPoly.isClosed()) exPoly << exPoly.first();
-                exclusionPolygonsNED.append(exPoly);
+                if (exPoly.count() >= 3) {
+                    clipPaths.push_back(_toClipperPath(exPoly)); // Добавляем в Clipper формат
+                    exclusionPolysNED.append(exPoly);           // ДОБАВЛЯЕМ В QT ФОРМАТ
+                }
+            }
+        }
+    }
 
-                // LOGIC FOR DETERMINING CUT POINTS
-                QPointF center;
-                if (_isPolygonCircle(exPoly, center)) {
-                    // Case 2: For a circle, the center is enough if it is inside
-                    if (mainPolygonNED.containsPoint(center, Qt::OddEvenFill)) {
-                        splitYCoords.append(center.y());
-                    }
-                } else {
-                    // Case 3: Для многоугольника берем Y-координаты ВСЕХ его вершин, которые внутри поля
-                    bool hasInternalVertex = false;
-                    for (const QPointF& vertex : exPoly) {
-                        if (mainPolygonNED.containsPoint(vertex, Qt::OddEvenFill)) {
-                            splitYCoords.append(vertex.y());
-                            hasInternalVertex = true;
+    // Вычитание
+    ClipperLib::Clipper c;
+    c.AddPath(_toClipperPath(mainPolyNED), ClipperLib::ptSubject, true);
+    c.AddPaths(clipPaths, ClipperLib::ptClip, true);
+    ClipperLib::Paths solution;
+    c.Execute(ClipperLib::ctDifference, solution, ClipperLib::pftEvenOdd, ClipperLib::pftEvenOdd);
+
+    QList<QPolygonF> allowedPolygons;
+    for (const auto& path : solution) allowedPolygons << _fromClipperPath(path);
+
+    // ВАЖНО: Передаем exclusionPolysNED вместо clipPaths
+    _generateTransectsForAllowedPolygons(refly, allowedPolygons, tangentOrigin, exclusionPolysNED);
+}
+
+void AgroComplexItem::_generateTransectsForAllowedPolygons(bool refly, const QList<QPolygonF>& allowedPolygons, const QGeoCoordinate& tangentOrigin, const QList<QPolygonF>& exclusionPolygons)
+{
+    _transects.clear();
+    if (allowedPolygons.isEmpty()) return;
+
+    double gridAngle = _clampGridAngle90(_gridAngleFact.rawValue().toDouble() + (refly ? 90 : 0));
+    double gridSpacing = _cameraCalc.adjustedFootprintSide()->rawValue().toDouble();
+
+    QRectF totalBr;
+    for (const auto& p : allowedPolygons) totalBr = totalBr.united(p.boundingRect());
+    QPointF center = totalBr.center();
+    double maxDim = qMax(totalBr.width(), totalBr.height()) + 2000.0;
+
+    QList<QLineF> rawLines;
+    double xStart = center.x() - maxDim/2.0;
+    while (xStart < center.x() + maxDim/2.0) {
+        rawLines << QLineF(_rotatePoint(QPointF(xStart, center.y() - maxDim/2.0), center, gridAngle),
+                           _rotatePoint(QPointF(xStart, center.y() + maxDim/2.0), center, gridAngle));
+        xStart += gridSpacing;
+    }
+
+    QList<QLineF> candidateSegments;
+    for (const auto& poly : allowedPolygons) {
+        _intersectLinesWithPolygon(rawLines, poly, candidateSegments);
+    }
+
+    if (candidateSegments.isEmpty()) return;
+
+    // СТАРТ: Берем ближайший к выбранному углу сегмент
+    QPointF currentPos = _getAndOrderFirstPoint(candidateSegments, totalBr);
+
+    while (!candidateSegments.isEmpty()) {
+        int bestIdx = -1;
+        bool reverse = false;
+        double minScore = 1e12; // Используем "Score" вместо просто дистанции
+
+        for (int i = 0; i < candidateSegments.size(); ++i) {
+            for (bool rev : {false, true}) {
+                QPointF testPt = rev ? candidateSegments[i].p2() : candidateSegments[i].p1();
+                double dist = QLineF(currentPos, testPt).length();
+
+                // ШТРАФ: Если переход к этой точке пересекает красную зону,
+                // мы искусственно увеличиваем дистанцию в 100 раз,
+                // чтобы алгоритм сначала выбрал сегменты на своей стороне.
+                QLineF jumpPath(currentPos, testPt);
+                bool hitsHole = false;
+                for(const auto& hole : exclusionPolygons) {
+                    for(int j=0; j<hole.count()-1; j++) {
+                        if(jumpPath.intersects(QLineF(hole[j], hole[j+1]), nullptr) == QLineF::BoundedIntersection) {
+                            hitsHole = true; break;
                         }
                     }
-                    // If the polygon is inside but vertices are on the boundary,
-                    // add at least the top and bottom points of its bounding rectangle
-                    if (!hasInternalVertex && mainPolygonNED.boundingRect().intersects(exPoly.boundingRect())) {
-                         splitYCoords.append(exPoly.boundingRect().top());
-                         splitYCoords.append(exPoly.boundingRect().bottom());
-                    }
+                    if(hitsHole) break;
+                }
+
+                double score = hitsHole ? dist * 100.0 : dist;
+
+                if (score < minScore) {
+                    minScore = score;
+                    bestIdx = i;
+                    reverse = rev;
                 }
             }
         }
-    }
 
-    // Generating paths
-    if (!splitYCoords.isEmpty()) {
-        // Sort coordinates from "North" to "South" (along the Y axis in NED)
-        std::sort(splitYCoords.begin(), splitYCoords.end());
+        QLineF line = candidateSegments.takeAt(bestIdx);
+        if (reverse) line = QLineF(line.p2(), line.p1());
 
-        // Removing duplicates (if the circles are on the same line)
-
-        splitYCoords.erase(std::unique(splitYCoords.begin(), splitYCoords.end(),
-            [](double a, double b){ return qAbs(a - b) < 2.0; }), splitYCoords.end());
-
-        QRectF br = mainPolygonNED.boundingRect();
-        double currentTopY = br.top() - 100.0; //We start just above the upper limit
-
-        // Cutting the field into stripso strips
-        for (double splitY : splitYCoords) {
-            // We skip cuts that go beyond the boundaries of the current field
-            if (splitY <= currentTopY + 1.0) continue;
-            if (splitY >= br.bottom() - 1.0) continue;
-
-            QRectF stripRect(br.left() - 1000.0, currentTopY, br.width() + 2000.0, splitY - currentTopY);
-            QPolygonF stripPolygon = mainPolygonNED.intersected(QPolygonF(stripRect));
-
-            if (!stripPolygon.isEmpty() && stripPolygon.boundingRect().height() > 1.0) {
-                _generateTransectsForPolygon(refly, stripPolygon, tangentOrigin, exclusionPolygonsNED);
-            }
-            currentTopY = splitY;
+        // Если все же пришлось прыгать через дырку - строим Bypass
+        if (!_transects.isEmpty()) {
+            _appendBypassIfNecessary(_transects.last().last().coord, _toGeo(line.p1(), tangentOrigin), tangentOrigin, exclusionPolygons);
         }
 
-        // Final bottom segment
-        QRectF finalRect(br.left() - 1000.0, currentTopY, br.width() + 2000.0, (br.bottom() + 100.0) - currentTopY);
-        QPolygonF finalPolygon = mainPolygonNED.intersected(QPolygonF(finalRect));
-        if (!finalPolygon.isEmpty() && finalPolygon.boundingRect().height() > 1.0) {
-            _generateTransectsForPolygon(refly, finalPolygon, tangentOrigin, exclusionPolygonsNED);
-        }
-    }
-    else {
-        // Standard algorithm (Case 1)
-        _generateTransectsForPolygon(refly, mainPolygonNED, tangentOrigin, exclusionPolygonsNED);
+        // Добавляем сегмент
+        QList<TransectStyleComplexItem::CoordInfo_t> transect;
+        TransectStyleComplexItem::CoordInfo_t p1, p2;
+        p1.coord = _toGeo(line.p1(), tangentOrigin); p1.coordType = CoordTypeSurveyEntry;
+        p2.coord = _toGeo(line.p2(), tangentOrigin); p2.coordType = CoordTypeSurveyExit;
+        transect.append(p1); transect.append(p2);
+
+        _transects.append(transect);
+        currentPos = line.p2();
     }
 }
-
-#if 0
-    // Splitting polygons is not supported since this code would get stuck in a infinite loop
-    // Code is left here in case someone wants to try to resurrect it
-
-
-void AgroComplexItem::_PolygonDecomposeConvex(const QPolygonF& polygon, QList<QPolygonF>& decomposedPolygons)
-{
-	// this follows "Mark Keil's Algorithm" https://mpen.ca/406/keil
-    int decompSize = std::numeric_limits<int>::max();
-    if (polygon.size() < 3) return;
-    if (polygon.size() == 3) {
-        decomposedPolygons << polygon;
-        return;
-    }
-
-    QList<QPolygonF> decomposedPolygonsMin{};
-
-    for (auto vertex = polygon.begin(); vertex != polygon.end(); ++vertex)
-    {
-        // is vertex reflex?
-        bool vertexIsReflex = _VertexIsReflex(polygon, vertex);
-
-        if (!vertexIsReflex) continue;
-
-        for (auto vertexOther = polygon.begin(); vertexOther != polygon.end(); ++vertexOther)
-        {
-            auto vertexBefore = vertex == polygon.begin() ? polygon.end() - 1 : vertex - 1;
-            auto vertexAfter = vertex == polygon.end() - 1 ? polygon.begin() : vertex + 1;
-            if (vertexOther == vertex) continue;
-            if (vertexAfter == vertexOther) continue;
-            if (vertexBefore == vertexOther) continue;
-            bool canSee = _VertexCanSeeOther(polygon, vertex, vertexOther);
-            if (!canSee) continue;
-
-            QPolygonF polyLeft;
-            auto v = vertex;
-            auto polyLeftContainsReflex = false;
-            while ( v != vertexOther) {
-                if (v != vertex && _VertexIsReflex(polygon, v)) {
-                    polyLeftContainsReflex = true;
-                }
-                polyLeft << *v;
-                ++v;
-                if (v == polygon.end()) v = polygon.begin();
-            }
-            polyLeft << *vertexOther;
-            auto polyLeftValid = !(polyLeftContainsReflex && polyLeft.size() == 3);
-
-            QPolygonF polyRight;
-            v = vertexOther;
-            auto polyRightContainsReflex = false;
-            while ( v != vertex) {
-                if (v != vertex && _VertexIsReflex(polygon, v)) {
-                    polyRightContainsReflex = true;
-                }
-                polyRight << *v;
-                ++v;
-                if (v == polygon.end()) v = polygon.begin();
-            }
-            polyRight << *vertex;
-            auto polyRightValid = !(polyRightContainsReflex && polyRight.size() == 3);
-
-            if (!polyLeftValid || ! polyRightValid) {
-//                decompSize = std::numeric_limits<int>::max();
-                continue;
-            }
-
-            // recursion
-            QList<QPolygonF> polyLeftDecomposed{};
-            _PolygonDecomposeConvex(polyLeft, polyLeftDecomposed);
-
-            QList<QPolygonF> polyRightDecomposed{};
-            _PolygonDecomposeConvex(polyRight, polyRightDecomposed);
-
-            // compositon
-            auto subSize = polyLeftDecomposed.size() + polyRightDecomposed.size();
-            if ((polyLeftContainsReflex && polyLeftDecomposed.size() == 1)
-                    || (polyRightContainsReflex && polyRightDecomposed.size() == 1))
-            {
-                // don't accept polygons that contian reflex vertices and were not split
-                subSize = std::numeric_limits<int>::max();
-            }
-            if (subSize < decompSize) {
-                decompSize = subSize;
-                decomposedPolygonsMin = polyLeftDecomposed + polyRightDecomposed;
-            }
-        }
-
-    }
-
-    // assemble output
-    if (decomposedPolygonsMin.size() > 0) {
-        decomposedPolygons << decomposedPolygonsMin;
-    } else {
-        decomposedPolygons << polygon;
-    }
-
-    return;
-}
-
-bool AgroComplexItem::_VertexCanSeeOther(const QPolygonF& polygon, const QPointF* vertexA, const QPointF* vertexB) {
-    if (vertexA == vertexB) return false;
-    auto vertexAAfter = vertexA + 1 == polygon.end() ? polygon.begin() : vertexA + 1;
-    auto vertexABefore = vertexA == polygon.begin() ? polygon.end() - 1 : vertexA - 1;
-    if (vertexAAfter == vertexB) return false;
-    if (vertexABefore == vertexB) return false;
-//    qCDebug(AgroComplexItemLog) << "_VertexCanSeeOther false after first checks ";
-
-    bool visible = true;
-//    auto diff = *vertexA - *vertexB;
-    QLineF lineAB{*vertexA, *vertexB};
-    auto distanceAB = lineAB.length();//sqrtf(diff.x() * diff.x() + diff.y()*diff.y());
-
-//    qCDebug(AgroComplexItemLog) << "_VertexCanSeeOther distanceAB " << distanceAB;
-    for (auto vertexC = polygon.begin(); vertexC != polygon.end(); ++vertexC)
-    {
-        if (vertexC == vertexA) continue;
-        if (vertexC == vertexB) continue;
-        auto vertexD = vertexC + 1 == polygon.end() ? polygon.begin() : vertexC + 1;
-        if (vertexD == vertexA) continue;
-        if (vertexD == vertexB) continue;
-        QLineF lineCD(*vertexC, *vertexD);
-        QPointF intersection{};
-
-        auto intersects = lineAB.intersects(lineCD, &intersection);
-        if (intersects == QLineF::IntersectType::BoundedIntersection) {
-//            auto diffIntersection = *vertexA - intersection;
-//            auto distanceIntersection = sqrtf(diffIntersection.x() * diffIntersection.x() + diffIntersection.y()*diffIntersection.y());
-//            qCDebug(AgroComplexItemLog) << "*vertexA " << *vertexA << "*vertexB " << *vertexB  << " intersection " << intersection;
-
-            QLineF lineIntersection{*vertexA, intersection};
-            auto distanceIntersection = lineIntersection.length();//sqrtf(diff.x() * diff.x() + diff.y()*diff.y());
-            qCDebug(AgroComplexItemLog) << "_VertexCanSeeOther distanceIntersection " << distanceIntersection;
-            if (distanceIntersection < distanceAB) {
-                visible = false;
-                break;
-            }
-        }
-
-    }
-
-    return visible;
-}
-
-bool AgroComplexItem::_VertexIsReflex(const QPolygonF& polygon, QList<QPointF>::const_iterator& vertexIter) {
-    auto vertexBefore = vertex == polygon.begin() ? polygon.end() - 1 : vertex - 1;
-    auto vertexAfter = vertex == polygon.end() - 1 ? polygon.begin() : vertex + 1;
-    auto area = (((vertex->x() - vertexBefore->x())*(vertexAfter->y() - vertexBefore->y()))-((vertexAfter->x() - vertexBefore->x())*(vertex->y() - vertexBefore->y())));
-    return area > 0;
-
-}
-#endif
 
 void AgroComplexItem::_rebuildTransectsFromPolygon(bool refly, const QPolygonF& polygon, const QGeoCoordinate& tangentOrigin, const QPointF* const transitionPoint)
 {
@@ -1311,6 +1189,7 @@ QList<QLineF> AgroComplexItem::_subtractPolygonFromLine(const QLineF& line, cons
     QList<QPointF> points;
     points << line.p1() << line.p2();
 
+    // Находим все точки пересечения линии с ребрами запретного полигона
     for (int i = 0; i < polygon.count() - 1; i++) {
         QPointF p;
         if (line.intersects(QLineF(polygon[i], polygon[i+1]), &p) == QLineF::BoundedIntersection) {
@@ -1318,14 +1197,17 @@ QList<QLineF> AgroComplexItem::_subtractPolygonFromLine(const QLineF& line, cons
         }
     }
 
+    // Сортируем точки вдоль линии от p1 к p2
     std::sort(points.begin(), points.end(), [&](const QPointF& a, const QPointF& b) {
         return QLineF(line.p1(), a).length() < QLineF(line.p1(), b).length();
     });
 
+    // Проверяем каждый полученный отрезок
     for (int i = 0; i < points.count() - 1; i++) {
         QLineF seg(points[i], points[i+1]);
         if (seg.length() < 0.1) continue;
-        // If the middle of the segment is INSIDE the forbidden zone, throw it out
+
+        // Если середина отрезка СНАРУЖИ запретной зоны (exclusion), мы его берем
         if (!polygon.containsPoint(seg.pointAt(0.5), Qt::WindingFill)) {
             resultLines.append(seg);
         }
@@ -1389,204 +1271,59 @@ QList<QPolygonF> AgroComplexItem::_splitPolygonHorizontal(const QPolygonF& polyg
     return results;
 }
 
-void AgroComplexItem::_generateTransectsForPolygon(bool refly, const QPolygonF& polygon, const QGeoCoordinate& tangentOrigin, const QList<QPolygonF>& exclusionPolygons)
-{
-
-    double safetyMargin = 15.0; // exclusion zone extension size
-    QList<QPolygonF> inflatedExclusions;
-
-    _inflateExclusionZones(exclusionPolygons, safetyMargin, inflatedExclusions);
-    // Calculation of mesh parameters
-    double gridAngle = _gridAngleFact.rawValue().toDouble();
-    double gridSpacing = _cameraCalc.adjustedFootprintSide()->rawValue().toDouble();
-    if (gridSpacing < _minimumTransectSpacingMeters) {
-        gridSpacing = _forceLargeTransectSpacingMeters;
-    }
-
-    gridAngle = _clampGridAngle90(gridAngle);
-    gridAngle += refly ? 90 : 0;
-
-    QRectF boundingRect = polygon.boundingRect();
-    QPointF boundingCenter = boundingRect.center();
-
-    // Line generation
-    QList<QLineF> lineList;
-    double maxWidth = qMax(boundingRect.width(), boundingRect.height()) + 2000.0;
-    double halfWidth = maxWidth / 2.0;
-    double transectX = boundingCenter.x() - halfWidth;
-    double transectXMax = transectX + maxWidth;
-    while (transectX < transectXMax) {
-        double transectYTop = boundingCenter.y() - halfWidth;
-        double transectYBottom = boundingCenter.y() + halfWidth;
-
-        lineList += QLineF(_rotatePoint(QPointF(transectX, transectYTop), boundingCenter, gridAngle),
-                           _rotatePoint(QPointF(transectX, transectYBottom), boundingCenter, gridAngle));
-        transectX += gridSpacing;
-    }
-
-    // Intersect and cut (from original with macros preserved)
-    QList<QLineF> intersectLines;
-#if 1
-    _intersectLinesWithPolygon(lineList, polygon, intersectLines);
-
-    if (!exclusionPolygons.isEmpty()) {
-        QList<QLineF> clippedLines = intersectLines;
-        for (const QPolygonF& exPoly : inflatedExclusions) {
-            QList<QLineF> newLinesForThisPass;
-            for (const QLineF& line : clippedLines) {
-                newLinesForThisPass += _subtractPolygonFromLine(line, exPoly);
-            }
-            clippedLines = newLinesForThisPass;
-        }
-        intersectLines = clippedLines;
-    }
-#else
-    intersectLines = lineList;
-#endif
-
-    // Handling the case if there are less than two lines
-    // if (intersectLines.count() < 2 && intersectLines.count() > 0) {
-
-    // }
-
-    if (intersectLines.isEmpty()) return;
-
-    QList<QLineF> resultLines;
-    _adjustLineDirection(intersectLines, resultLines);
-
-    // Convert NED -> Geo
-    QList<QList<QGeoCoordinate>> transects;
-    for (const QLineF& line : resultLines) {
-        QGeoCoordinate coord;
-        QList<QGeoCoordinate> transect;
-
-        QGCGeo::convertNedToGeo(line.p1().y(), line.p1().x(), 0, tangentOrigin, coord);
-        transect.append(coord);
-        QGCGeo::convertNedToGeo(line.p2().y(), line.p2().x(), 0, tangentOrigin, coord);
-        transect.append(coord);
-
-        transects.append(transect);
-    }
-
-    _adjustTransectsToEntryPointLocation(transects);
-
-    if (!_transects.isEmpty()) {
-        _optimizeTransectsForShortestDistance(_transects.last().last().coord, transects);
-    }
-
-    // Lawnmower logic and extras. parameters
-    bool reverseVertices = false;
-    for (int i=0; i<transects.count(); i++) {
-        QList<QGeoCoordinate> transectVertices = transects[i];
-        if (reverseVertices) {
-            reverseVertices = false;
-            QList<QGeoCoordinate> reversedVertices;
-            for (int j=transectVertices.count()-1; j>=0; j--) {
-                reversedVertices.append(transectVertices[j]);
-            }
-            transectVertices = reversedVertices;
-        } else {
-            reverseVertices = true;
-        }
-
-        // Convert to CoordInfo
-        QList<TransectStyleComplexItem::CoordInfo_t> coordInfoTransect;
-        coordInfoTransect.append((TransectStyleComplexItem::CoordInfo_t){ transectVertices[0], CoordTypeSurveyEntry });
-        coordInfoTransect.append((TransectStyleComplexItem::CoordInfo_t){ transectVertices[1], CoordTypeSurveyExit });
-
-        // Turnarounds
-        if (_hasTurnaround()) {
-            double turnAroundDistance = _turnAroundDistanceFact.rawValue().toDouble();
-
-            double azimuth = transectVertices[0].azimuthTo(transectVertices[1]);
-            QGeoCoordinate turnaroundIn = transectVertices[0].atDistanceAndAzimuth(-turnAroundDistance, azimuth);
-            turnaroundIn.setAltitude(qQNaN());
-            coordInfoTransect.prepend((TransectStyleComplexItem::CoordInfo_t){ turnaroundIn, CoordTypeTurnaround });
-
-            azimuth = transectVertices.last().azimuthTo(transectVertices[transectVertices.count() - 2]);
-            QGeoCoordinate turnaroundOut = transectVertices.last().atDistanceAndAzimuth(-turnAroundDistance, azimuth);
-            turnaroundOut.setAltitude(qQNaN());
-            coordInfoTransect.append((TransectStyleComplexItem::CoordInfo_t){ turnaroundOut, CoordTypeTurnaround });
-        }
-        if (!_transects.isEmpty()) {
-            _appendBypassIfNecessary(_transects.last().last().coord, coordInfoTransect.first().coord, tangentOrigin, exclusionPolygons);
-        }
-
-        _transects.append(coordInfoTransect);
-    }
-}
-
 void AgroComplexItem::_appendBypassIfNecessary(const QGeoCoordinate& start, const QGeoCoordinate& end, const QGeoCoordinate& tangentOrigin, const QList<QPolygonF>& exclusionPolygons)
 {
-    if (exclusionPolygons.isEmpty()) return;
-
     double y1, x1, y2, x2, d;
     QGCGeo::convertGeoToNed(start, tangentOrigin, y1, x1, d);
     QGCGeo::convertGeoToNed(end, tangentOrigin, y2, x2, d);
     QLineF path(x1, y1, x2, y2);
 
-    for (const QPolygonF& poly : exclusionPolygons) {
-        // We check whether the path is blocked (does it intersect the edges OR the middle inside)
-        bool intersects = false;
-        for (int i = 0; i < poly.count() - 1; i++) {
-            if (path.intersects(QLineF(poly[i], poly[i+1]), nullptr) == QLineF::BoundedIntersection) {
-                intersects = true; break;
-            }
-        }
-
-        if (!intersects && !poly.containsPoint(path.center(), Qt::WindingFill)) continue;
-
-        // Find all entry/exit points + current ends, if they are inside
-        QList<QPointF> pts;
-        if (poly.containsPoint(path.p1(), Qt::WindingFill)) pts << path.p1();
-        if (poly.containsPoint(path.p2(), Qt::WindingFill)) pts << path.p2();
-
+    for (const auto& poly : exclusionPolygons) {
+        QList<QPointF> intersectPts;
         for (int i = 0; i < poly.count() - 1; i++) {
             QPointF p;
-            if (path.intersects(QLineF(poly[i], poly[i+1]), &p) == QLineF::BoundedIntersection) pts << p;
+            if (path.intersects(QLineF(poly[i], poly[i+1]), &p) == QLineF::BoundedIntersection) intersectPts << p;
         }
 
-        if (pts.count() < 2) continue;
+        if (intersectPts.count() < 2 && !poly.containsPoint(path.center(), Qt::WindingFill)) continue;
 
-        std::sort(pts.begin(), pts.end(), [&](const QPointF& a, const QPointF& b) {
+        // Если пересекаем дырку, строим путь по вершинам
+        std::sort(intersectPts.begin(), intersectPts.end(), [&](const QPointF& a, const QPointF& b) {
             return QLineF(path.p1(), a).length() < QLineF(path.p1(), b).length();
         });
 
-        // We take the extreme points of the “problem” area on the border or inside the zone
-        QPointF pIn = pts.first();
-        QPointF pOut = pts.last();
+        QPointF pIn = intersectPts.isEmpty() ? path.p1() : intersectPts.first();
+        QPointF pOut = intersectPts.isEmpty() ? path.p2() : intersectPts.last();
 
-        // Finding the nearest vertex indices to traverse
-        int i1 = -1, i2 = -1;
+        int i1 = 0, i2 = 0;
         double d1 = 1e10, d2 = 1e10;
         for(int i=0; i<poly.count()-1; i++) {
-            double dist1 = QLineF(pIn, poly[i]).length();
-            if(dist1 < d1) { d1 = dist1; i1 = i; }
-            double dist2 = QLineF(pOut, poly[i]).length();
-            if(dist2 < d2) { d2 = dist2; i2 = i; }
+            double dist1 = QLineF(pIn, poly[i]).length(); if(dist1 < d1) { d1 = dist1; i1 = i; }
+            double dist2 = QLineF(pOut, poly[i]).length(); if(dist2 < d2) { d2 = dist2; i2 = i; }
         }
 
-        auto getPath = [&](bool cw) {
+        auto build = [&](bool cw) {
             QList<QPointF> r; r << pIn;
-            int cur = i1;
-            while(cur != i2) {
+            int cur = i1; int safety = 0;
+            while(cur != i2 && safety++ < 500) {
                 r << poly[cur];
                 cur = cw ? (cur + 1) % (poly.count()-1) : (cur - 1 + (poly.count()-1)) % (poly.count()-1);
             }
-            r << poly[i2] << pOut;
-            return r;
+            r << poly[i2] << pOut; return r;
         };
 
-        auto pathCW = getPath(true), pathCCW = getPath(false);
+        auto pCW = build(true); auto pCCW = build(false);
         auto dist = [](const QList<QPointF>& l) { double s=0; for(int i=0; i<l.size()-1; i++) s += QLineF(l[i], l[i+1]).length(); return s; };
 
         QList<TransectStyleComplexItem::CoordInfo_t> bypass;
-        for(const QPointF& pt : (dist(pathCW) < dist(pathCCW) ? pathCW : pathCCW)) {
-            QGeoCoordinate c; QGCGeo::convertNedToGeo(pt.y(), pt.x(), 0, tangentOrigin, c);
-            bypass << (TransectStyleComplexItem::CoordInfo_t){c, CoordTypeInteriorHoverTrigger};
+        for(const auto& pt : (dist(pCW) < dist(pCCW) ? pCW : pCCW)) {
+            TransectStyleComplexItem::CoordInfo_t bp;
+            bp.coord = _toGeo(pt, tangentOrigin);
+            bp.coordType = CoordTypeInteriorHoverTrigger;
+            bypass.append(bp);
         }
         _transects.append(bypass);
-        return;
+        break; // Облетаем первую встреченную дырку
     }
 }
 
@@ -1652,4 +1389,28 @@ void AgroComplexItem::_inflateExclusionZones(const QList<QPolygonF>& exclusionPo
     qCDebug(AgroComplexItemLog) << "Inclusion margin applied:" << marginMeters
                                 << "Original zones:" << exclusionPolygonsNED.count()
                                 << "Inflated zones:" << inflatedPolygonsNED.count();
+}
+QPointF AgroComplexItem::_getAndOrderFirstPoint(const QList<QLineF>& segments, const QRectF& boundingRect)
+{
+    if (segments.isEmpty()) return QPointF(0,0);
+
+    QPointF target;
+    switch (_entryPoint) {
+        case EntryLocationTopLeft:     target = boundingRect.topLeft(); break;
+        case EntryLocationTopRight:    target = boundingRect.topRight(); break;
+        case EntryLocationBottomLeft:  target = boundingRect.bottomLeft(); break;
+        case EntryLocationBottomRight: target = boundingRect.bottomRight(); break;
+        default: target = boundingRect.topLeft();
+    }
+
+    // Ищем самую близкую точку любого сегмента к выбранному углу
+    QPointF closest;
+    double minDist = std::numeric_limits<double>::max();
+    for (const QLineF& s : segments) {
+        double d1 = QLineF(target, s.p1()).length();
+        double d2 = QLineF(target, s.p2()).length();
+        if (d1 < minDist) { minDist = d1; closest = s.p1(); }
+        if (d2 < minDist) { minDist = d2; closest = s.p2(); }
+    }
+    return target; // Или возвращаем target, жадный алгоритм сам найдет ближайший старт
 }

@@ -14,6 +14,9 @@
 
 #include <QtCore/QLoggingCategory>
 
+#include "clipper.hpp"
+
+
 Q_DECLARE_LOGGING_CATEGORY(SurveyComplexItemLog)
 
 class PlanMasterController;
@@ -106,7 +109,7 @@ private:
         CameraTriggerHoverAndCapture
     };
 
-    QPointF _rotatePoint(const QPointF& point, const QPointF& origin, double angle);
+    QPointF        _rotatePoint(const QPointF& point, const QPointF& origin, double angle);
     void _intersectLinesWithRect(const QList<QLineF>& lineList, const QRectF& boundRect, QList<QLineF>& resultLines);
     void _intersectLinesWithPolygon(const QList<QLineF>& lineList, const QPolygonF& polygon, QList<QLineF>& resultLines);
     QList<QLineF> _subtractPolygonFromLine(const QLineF& line, const QPolygonF& polygon);
@@ -121,7 +124,7 @@ private:
     void _reverseInternalTransectPoints(QList<QList<QGeoCoordinate>>& transects);
     void _adjustTransectsToEntryPointLocation(QList<QList<QGeoCoordinate>>& transects);
     bool _gridAngleIsNorthSouthTransects();
-    double _clampGridAngle90(double gridAngle);
+    double         _clampGridAngle90(double gridAngle);
     bool _imagesEverywhere(void) const;
     bool _triggerCamera(void) const;
     bool _hasTurnaround(void) const;
@@ -139,13 +142,28 @@ private:
     static bool _ignoreGlobalUpdate;
     void _updateOtherAgroItems();
     bool _isPolygonCircle(const QPolygonF& polygon, QPointF& center);
-    void _generateTransectsForPolygon(bool refly,
-                                      const QPolygonF& polygon,
-                                      const QGeoCoordinate& tangentOrigin,
-                                      const QList<QPolygonF>& exclusionPolygons);
+
     QList<QPolygonF> _splitPolygonHorizontal(const QPolygonF& polygon, double splitY);
     void _appendBypassIfNecessary(const QGeoCoordinate& start, const QGeoCoordinate& end, const QGeoCoordinate& tangentOrigin, const QList<QPolygonF>& exclusionPolygons);
     void _inflateExclusionZones(const QList<QPolygonF>& exclusionPolygonsNED, double marginMeters, QList<QPolygonF>& inflatedPolygonsNED);
+    QPointF        _getAndOrderFirstPoint(const QList<QLineF>& segments, const QRectF& boundingRect);
+
+
+    void _generateTransectsForAllowedPolygons(bool refly,
+                                          const QList<QPolygonF>& allowedPolygons,
+                                          const QGeoCoordinate& tangentOrigin,
+                                          const QList<QPolygonF>& exclusionPolygons);
+
+
+
+    // Хелперы для конвертации типов Clipper <-> Qt
+    ClipperLib::Path _toClipperPath(const QPolygonF& poly) const;
+    QPolygonF        _fromClipperPath(const ClipperLib::Path& path) const;
+
+    // Константа для точности (Clipper работает с целыми числами, 1000.0 = 1мм при NED в метрах)
+    static constexpr double _clipperScale = 1000.0;
+    QGeoCoordinate _toGeo(const QPointF& pt, const QGeoCoordinate& origin); // Проверьте наличие этого!
+    //
 #if 0
     // Splitting polygons is not supported since this code would get stuck in a infinite loop
     // Code is left here in case someone wants to try to resurrect it
@@ -153,7 +171,6 @@ private:
     void _rebuildTransectsPhase1WorkerSplitPolygons(bool refly);
 
     // Decompose polygon into list of convex sub polygons
-    void _PolygonDecomposeConvex(const QPolygonF& polygon, QList<QPolygonF>& decomposedPolygons);
     // return true if vertex a can see vertex b
     bool _VertexCanSeeOther(const QPolygonF& polygon, const QPointF* vertexA, const QPointF* vertexB);
     bool _VertexIsReflex(const QPolygonF& polygon, QList<QPointF>::const_iterator& vertexIter);
