@@ -1392,7 +1392,7 @@ QList<QPolygonF> AgroComplexItem::_splitPolygonHorizontal(const QPolygonF& polyg
 void AgroComplexItem::_generateTransectsForPolygon(bool refly, const QPolygonF& polygon, const QGeoCoordinate& tangentOrigin, const QList<QPolygonF>& exclusionPolygons)
 {
 
-    double safetyMargin = 2.0;
+    double safetyMargin = 15.0; // exclusion zone extension size
     QList<QPolygonF> inflatedExclusions;
 
     _inflateExclusionZones(exclusionPolygons, safetyMargin, inflatedExclusions);
@@ -1431,7 +1431,7 @@ void AgroComplexItem::_generateTransectsForPolygon(bool refly, const QPolygonF& 
 
     if (!exclusionPolygons.isEmpty()) {
         QList<QLineF> clippedLines = intersectLines;
-        for (const QPolygonF& exPoly : exclusionPolygons) {
+        for (const QPolygonF& exPoly : inflatedExclusions) {
             QList<QLineF> newLinesForThisPass;
             for (const QLineF& line : clippedLines) {
                 newLinesForThisPass += _subtractPolygonFromLine(line, exPoly);
@@ -1594,45 +1594,62 @@ void AgroComplexItem::_appendBypassIfNecessary(const QGeoCoordinate& start, cons
 void AgroComplexItem::_inflateExclusionZones(const QList<QPolygonF>& exclusionPolygonsNED, double marginMeters, QList<QPolygonF>& inflatedPolygonsNED)
 {
     inflatedPolygonsNED.clear();
-    if (marginMeters <= 0) {
+
+    if (exclusionPolygonsNED.isEmpty()) {
+        return;
+    }
+
+    if (marginMeters < 0.1) { // Если отступ слишком мал, просто копируем
         inflatedPolygonsNED = exclusionPolygonsNED;
         return;
     }
 
-    // Scaling factor to go from double (meters) to ClipperLib::cInt (millimeters)
+    // Clipper работает с целыми числами. 1000.0 = миллиметровая точность для метров.
     const double scale = 1000.0;
+    ClipperLib::ClipperOffset offsetter;
 
     for (const QPolygonF& polygon : exclusionPolygonsNED) {
+        if (polygon.count() < 3) continue;
+
         ClipperLib::Path path;
         for (const QPointF& pt : polygon) {
             path.push_back(ClipperLib::IntPoint(
-                static_cast<ClipperLib::cInt>(pt.x() * scale),
-                static_cast<ClipperLib::cInt>(pt.y() * scale)
+                static_cast<ClipperLib::cInt>(std::round(pt.x() * scale)),
+                static_cast<ClipperLib::cInt>(std::round(pt.y() * scale))
             ));
         }
 
-        ClipperLib::ClipperOffset offsetter;
-        // jtRound gives rounded corners, which is better for smooth flight
+        // ВАЖНО: ClipperOffset ожидает корректную ориентацию.
+        // Если полигон вывернут, отступ может уйти "внутрь" вместо "наружу".
+        if (!ClipperLib::Orientation(path)) {
+            ClipperLib::ReversePath(path);
+        }
+
         offsetter.AddPath(path, ClipperLib::jtRound, ClipperLib::etClosedPolygon);
+    }
 
-        ClipperLib::Paths solution;
-        // A positive value expands the polygon outward
-        offsetter.Execute(solution, marginMeters * scale);
+    ClipperLib::Paths solution;
+    // Execute принимает (результат, дельта * масштаб)
+    offsetter.Execute(solution, marginMeters * scale);
 
-        // Convert back to QPolygonF
-        for (const ClipperLib::Path& outPath : solution) {
-            QPolygonF inflatedPoly;
-            for (const ClipperLib::IntPoint& pt : outPath) {
-                inflatedPoly << QPointF(
-                    static_cast<double>(pt.X) / scale,
-                    static_cast<double>(pt.Y) / scale
-                );
-            }
-            // Closing the polygon
-            if (!inflatedPoly.isEmpty()) {
-                inflatedPoly << inflatedPoly.first();
+    for (const ClipperLib::Path& outPath : solution) {
+        QPolygonF inflatedPoly;
+        for (const ClipperLib::IntPoint& pt : outPath) {
+            inflatedPoly << QPointF(
+                static_cast<double>(pt.X) / scale,
+                static_cast<double>(pt.Y) / scale
+            );
+        }
+
+        if (!inflatedPoly.isEmpty()) {
+            if (inflatedPoly.first() != inflatedPoly.last()) {
+                inflatedPoly << inflatedPoly.first(); // Замыкаем для QGC
             }
             inflatedPolygonsNED.append(inflatedPoly);
         }
     }
+
+    qCDebug(AgroComplexItemLog) << "Inclusion margin applied:" << marginMeters
+                                << "Original zones:" << exclusionPolygonsNED.count()
+                                << "Inflated zones:" << inflatedPolygonsNED.count();
 }

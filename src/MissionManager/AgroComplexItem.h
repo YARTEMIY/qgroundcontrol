@@ -145,7 +145,7 @@ private:
                                       const QList<QPolygonF>& exclusionPolygons);
     QList<QPolygonF> _splitPolygonHorizontal(const QPolygonF& polygon, double splitY);
     void _appendBypassIfNecessary(const QGeoCoordinate& start, const QGeoCoordinate& end, const QGeoCoordinate& tangentOrigin, const QList<QPolygonF>& exclusionPolygons);
-
+    void _inflateExclusionZones(const QList<QPolygonF>& exclusionPolygonsNED, double marginMeters, QList<QPolygonF>& inflatedPolygonsNED);
 #if 0
     // Splitting polygons is not supported since this code would get stuck in a infinite loop
     // Code is left here in case someone wants to try to resurrect it
