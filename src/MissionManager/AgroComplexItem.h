@@ -156,14 +156,14 @@ private:
 
 
 
-    // Хелперы для конвертации типов Clipper <-> Qt
+    bool _isPathClear(const QPointF& start, const QPointF& end, const QList<QPolygonF>& exclusionPolygons);
+
+
     ClipperLib::Path _toClipperPath(const QPolygonF& poly) const;
     QPolygonF        _fromClipperPath(const ClipperLib::Path& path) const;
 
-    // Константа для точности (Clipper работает с целыми числами, 1000.0 = 1мм при NED в метрах)
     static constexpr double _clipperScale = 1000.0;
-    QGeoCoordinate _toGeo(const QPointF& pt, const QGeoCoordinate& origin); // Проверьте наличие этого!
-    //
+    QGeoCoordinate _toGeo(const QPointF& pt, const QGeoCoordinate& origin);
 #if 0
     // Splitting polygons is not supported since this code would get stuck in a infinite loop
     // Code is left here in case someone wants to try to resurrect it

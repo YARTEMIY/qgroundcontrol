@@ -863,18 +863,15 @@ void AgroComplexItem::_generateTransectsForAllowedPolygons(bool refly, const QLi
     double gridAngle = _clampGridAngle90(_gridAngleFact.rawValue().toDouble() + (refly ? 90 : 0));
     double gridSpacing = _cameraCalc.adjustedFootprintSide()->rawValue().toDouble();
 
-    // We calculate the general Bounding Rect for all allowed islands
     QRectF totalBr;
     for (const auto& poly : allowedPolygons) {
         totalBr = totalBr.united(poly.boundingRect());
     }
 
-    // Generating "raw" grid lines covering the ENTIRE overall rectangle
+    // 1. Генерация базовых линий сетки
     QList<QLineF> rawLines;
     QPointF center = totalBr.center();
-    // We take a reserve in size so that when turning the mesh does not end
     double maxDim = qMax(totalBr.width(), totalBr.height()) * 1.5;
-
     double xStart = center.x() - maxDim / 2.0;
     double xEnd = center.x() + maxDim / 2.0;
 
@@ -886,74 +883,55 @@ void AgroComplexItem::_generateTransectsForAllowedPolygons(bool refly, const QLi
         xStart += gridSpacing;
     }
 
-    // Call a new function that can work with a list (holes)
-    QList<QLineF> candidateSegments;
-    _intersectLinesWithPolygon(rawLines, allowedPolygons, candidateSegments);
+    // 2. Логика змейки (Lawnmower)
+    bool reverseLineOrder = false; // Флаг направления движения вдоль линии
 
-    if (candidateSegments.isEmpty()) return;
+    for (const QLineF& gridLine : rawLines) {
+        // Пересекаем ОДНУ конкретную линию сетки со всеми разрешенными полигонами
+        QList<QLineF> segmentsOnThisLine;
+        _intersectLinesWithPolygon({gridLine}, allowedPolygons, segmentsOnThisLine);
 
-    // Greedy segment ordering algorithm
-    QPointF currentPos = _getAndOrderFirstPoint(candidateSegments, totalBr);
+        if (segmentsOnThisLine.isEmpty()) continue;
 
-    while (!candidateSegments.isEmpty()) {
-        int bestIdx = -1;
-        bool reverse = false;
-        double minScore = std::numeric_limits<double>::max();
+        // Сортируем сегменты на одной линии, чтобы они шли друг за другом
+        // Сортировка по расстоянию от P1 исходной gridLine (начало линии)
+        std::sort(segmentsOnThisLine.begin(), segmentsOnThisLine.end(), [&gridLine](const QLineF& a, const QLineF& b) {
+            return QLineF(gridLine.p1(), a.p1()).length() < QLineF(gridLine.p1(), b.p1()).length();
+        });
 
-        for (int i = 0; i < candidateSegments.size(); ++i) {
-            for (bool rev : {false, true}) {
-                QPointF testPt = rev ? candidateSegments[i].p2() : candidateSegments[i].p1();
-                double dist = QLineF(currentPos, testPt).length();
+        // Если мы идем в обратном направлении (snake), разворачиваем порядок сегментов на линии
+        if (reverseLineOrder) {
+            std::reverse(segmentsOnThisLine.begin(), segmentsOnThisLine.end());
+        }
 
-                // We check whether we are crossing ANY restricted zone when crossing
-                bool hitsHole = false;
-                QLineF jumpPath(currentPos, testPt);
-                for (const auto& hole : exclusionPolygons) {
-                    // Using slightly more robust intersection checking
-                    for (int j = 0; j < hole.count() - 1; j++) {
-                        if (jumpPath.intersects(QLineF(hole[j], hole[j+1]), nullptr) == QLineF::BoundedIntersection) {
-                            hitsHole = true; break;
-                        }
-                    }
-                    if (hitsHole) break;
+        for (QLineF& segment : segmentsOnThisLine) {
+            // Разворачиваем сам сегмент, если он не совпадает с направлением движения
+            if (reverseLineOrder) {
+                // В обратном проходе летим от конца к началу относительно первой линии
+                if (QLineF(gridLine.p1(), segment.p1()).length() < QLineF(gridLine.p1(), segment.p2()).length()) {
+                    segment = QLineF(segment.p2(), segment.p1());
                 }
-
-                // HARD PENALTY: If there is a hole in the way, we increase the Score enormously,
-                // so that the drone first completes all the segments on “its shore”.
-                double score = hitsHole ? (dist + 1000000.0) : dist;
-
-                if (score < minScore) {
-                    minScore = score;
-                    bestIdx = i;
-                    reverse = rev;
+            } else {
+                // В прямом проходе летим от начала к концу
+                if (QLineF(gridLine.p1(), segment.p1()).length() > QLineF(gridLine.p1(), segment.p2()).length()) {
+                    segment = QLineF(segment.p2(), segment.p1());
                 }
             }
-        }
 
-        if (bestIdx == -1 || bestIdx >= candidateSegments.size()) {
-            qWarning() << "AgroItem: Failed to find next segment. Remaining:" << candidateSegments.size();
-            break;
-        }
+            // Добавляем Bypass, если это не самый первый сегмент миссии
+            if (!_transects.isEmpty()) {
+                _appendBypassIfNecessary(_transects.last().last().coord, _toGeo(segment.p1(), tangentOrigin), tangentOrigin, exclusionPolygons);
+            }
 
-        QLineF line = candidateSegments.takeAt(bestIdx);
-        if (reverse) line = QLineF(line.p2(), line.p1());
-
-        // If we STILL had to jump (score > 1000000),
-        // or there is simply a hole in the path -build a bypass (Bypass)
-        if (!_transects.isEmpty() && !_transects.last().isEmpty()) {
-             _appendBypassIfNecessary(_transects.last().last().coord, _toGeo(line.p1(), tangentOrigin), tangentOrigin, exclusionPolygons);
-        }
-
-        // Adding a snake segment
-        QList<TransectStyleComplexItem::CoordInfo_t> transect;
-        transect.append({_toGeo(line.p1(), tangentOrigin), CoordTypeSurveyEntry});
-        transect.append({_toGeo(line.p2(), tangentOrigin), CoordTypeSurveyExit});
-
-        if (transect.count() >= 2) {
+            // Добавляем сегмент в итоговый список
+            QList<TransectStyleComplexItem::CoordInfo_t> transect;
+            transect.append({_toGeo(segment.p1(), tangentOrigin), CoordTypeSurveyEntry});
+            transect.append({_toGeo(segment.p2(), tangentOrigin), CoordTypeSurveyExit});
             _transects.append(transect);
         }
 
-        currentPos = line.p2();
+        // Меняем направление змейки для следующей линии сетки
+        reverseLineOrder = !reverseLineOrder;
     }
 }
 
@@ -1309,6 +1287,27 @@ QList<QPolygonF> AgroComplexItem::_splitPolygonHorizontal(const QPolygonF& polyg
     return results;
 }
 
+// Вспомогательная функция: проверяет, пересекает ли прямой отрезок запретные зоны
+bool AgroComplexItem::_isPathClear(const QPointF& start, const QPointF& end, const QList<QPolygonF>& exclusionPolygons)
+{
+    QLineF path(start, end);
+    if (path.length() < 0.1) return true;
+
+    for (const QPolygonF& poly : exclusionPolygons) {
+        // 1. Проверяем пересечение с ребрами (границами)
+        for (int i = 0; i < poly.count() - 1; i++) {
+            if (path.intersects(QLineF(poly[i], poly[i+1]), nullptr) == QLineF::BoundedIntersection) {
+                return false; // Путь прегражден ребром
+            }
+        }
+        // 2. Проверяем, не лежит ли весь отрезок внутри (на случай, если он не пересекает ребра)
+        if (poly.containsPoint(path.center(), Qt::WindingFill)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void AgroComplexItem::_appendBypassIfNecessary(const QGeoCoordinate& start, const QGeoCoordinate& end, const QGeoCoordinate& tangentOrigin, const QList<QPolygonF>& exclusionPolygons)
 {
     if (!start.isValid() || !end.isValid()) return;
@@ -1319,88 +1318,82 @@ void AgroComplexItem::_appendBypassIfNecessary(const QGeoCoordinate& start, cons
 
     QPointF pStart(x1, y1);
     QPointF pEnd(x2, y2);
-    QLineF path(pStart, pEnd);
 
-    if (path.length() < 0.1) return;
+    // Если прямой путь чист — обход не нужен
+    if (_isPathClear(pStart, pEnd, exclusionPolygons)) {
+        return;
+    }
 
+    // Ищем полигон, который мешает (упрощенно берем первый попавшийся для обхода)
     for (const QPolygonF& poly : exclusionPolygons) {
         if (poly.count() < 3) continue;
 
-        QList<QPointF> intersectPts;
-        for (int i = 0; i < poly.count() - 1; i++) {
-            QPointF p;
-            if (path.intersects(QLineF(poly[i], poly[i+1]), &p) == QLineF::BoundedIntersection) {
-                bool duplicate = false;
-                for (const auto& existing : intersectPts) {
-                    if (QLineF(existing, p).length() < 0.01) { duplicate = true; break; }
-                }
-                if (!duplicate) intersectPts << p;
-            }
-        }
-
-        if (intersectPts.count() < 2) {
-            if (!poly.containsPoint(path.center(), Qt::WindingFill)) continue;
-            intersectPts.clear();
-            intersectPts << pStart << pEnd;
-        }
-
-        std::sort(intersectPts.begin(), intersectPts.end(), [&](const QPointF& a, const QPointF& b) {
-            return QLineF(pStart, a).length() < QLineF(pStart, b).length();
-        });
-
-        QPointF pIn = intersectPts.first();
-        QPointF pOut = intersectPts.last();
-
+        // Находим ближайшие индексы входа и выхода на полигоне
         int i1 = -1, i2 = -1;
         double minDist1 = std::numeric_limits<double>::max();
         double minDist2 = std::numeric_limits<double>::max();
 
         for (int i = 0; i < poly.count() - 1; i++) {
-            double d1 = QLineF(pIn, poly[i]).length();
+            double d1 = QLineF(pStart, poly[i]).length();
             if (d1 < minDist1) { minDist1 = d1; i1 = i; }
-            double d2 = QLineF(pOut, poly[i]).length();
+            double d2 = QLineF(pEnd, poly[i]).length();
             if (d2 < minDist2) { minDist2 = d2; i2 = i; }
         }
 
         if (i1 == -1 || i2 == -1) continue;
 
-        auto buildBypass = [&](bool cw) {
-            QList<QPointF> r;
-            r << pIn;
+        // Строим два пути: по часовой и против
+        auto buildPath = [&](bool cw) {
+            QList<QPointF> path;
             int cur = i1;
-            int safety = 0;
-            int maxPoints = poly.count() + 1;
-            while (cur != i2 && safety++ < maxPoints) {
-                r << poly[cur];
-                int mod = poly.count() - 1;
-                cur = cw ? (cur + 1) % mod : (cur - 1 + mod) % mod;
+            int maxSteps = poly.count();
+            while (cur != i2 && maxSteps-- > 0) {
+                path << poly[cur];
+                cur = cw ? (cur + 1) % (poly.count()-1) : (cur - 1 + (poly.count()-1)) % (poly.count()-1);
             }
-            if (i2 >= 0 && i2 < poly.count()) r << poly[i2];
-            r << pOut;
-            return r;
+            path << poly[i2];
+            return path;
         };
 
-        auto pCW = buildBypass(true);
-        auto pCCW = buildBypass(false);
+        auto pathCW = buildPath(true);
+        auto pathCCW = buildPath(false);
 
+        // Выбираем кратчайший
         auto getLen = [](const QList<QPointF>& pts) {
             double s = 0;
-            for (int i = 0; i < pts.size() - 1; i++) s += QLineF(pts[i], pts[i+1]).length();
+            for(int i=0; i<pts.size()-1; i++) s += QLineF(pts[i], pts[i+1]).length();
             return s;
         };
+        QList<QPointF> rawBypass = (getLen(pathCW) < getLen(pathCCW)) ? pathCW : pathCCW;
 
-        const QList<QPointF>& finalPath = (getLen(pCW) < getLen(pCCW)) ? pCW : pCCW;
+        // === ВАРИАНТ 4: ОПТИМИЗАЦИЯ ПРЯМОЙ ВИДИМОСТИ (Shortcut) ===
+        QList<QPointF> optimizedBypass;
+        if (!rawBypass.isEmpty()) {
+            optimizedBypass << rawBypass.first();
+            int current = 0;
+            while (current < rawBypass.size() - 1) {
+                int furthestVisible = current + 1;
+                // Ищем самую дальнюю точку, до которой можно долететь по прямой
+                for (int next = current + 2; next < rawBypass.size(); next++) {
+                    if (_isPathClear(rawBypass[current], rawBypass[next], exclusionPolygons)) {
+                        furthestVisible = next;
+                    }
+                }
+                optimizedBypass << rawBypass[furthestVisible];
+                current = furthestVisible;
+            }
+        }
 
+        // Преобразуем оптимизированные точки в координаты миссии
         QList<TransectStyleComplexItem::CoordInfo_t> bypassNodes;
-        for (const auto& pt : finalPath) {
-            if (QLineF(pt, pStart).length() < 0.1 || QLineF(pt, pEnd).length() < 0.1) continue;
+        for (const auto& pt : optimizedBypass) {
             bypassNodes.append({_toGeo(pt, tangentOrigin), CoordTypeInteriorHoverTrigger});
         }
 
         if (!bypassNodes.isEmpty()) {
             _transects.append(bypassNodes);
         }
-        break;
+        break; // Обход построен
     }
 }
 
@@ -1412,14 +1405,19 @@ void AgroComplexItem::_inflateExclusionZones(const QList<QPolygonF>& exclusionPo
         return;
     }
 
-    if (marginMeters < 0.1) { // Если отступ слишком мал, просто копируем
+    // Если отступ практически нулевой, просто копируем исходные зоны
+    if (marginMeters < 0.05) {
         inflatedPolygonsNED = exclusionPolygonsNED;
         return;
     }
 
-    // Clipper работает с целыми числами. 1000.0 = миллиметровая точность для метров.
+    // Clipper работает с целыми числами. 1000.0 обеспечивает миллиметровую точность для метров.
     const double scale = 1000.0;
     ClipperLib::ClipperOffset offsetter;
+
+    // Устанавливаем предел для острых углов (MiterLimit).
+    // Значение 2.0 означает, что если угол слишком острый, он будет срезан, чтобы не уходить в бесконечность.
+    offsetter.MiterLimit = 2.0;
 
     for (const QPolygonF& polygon : exclusionPolygonsNED) {
         if (polygon.count() < 3) continue;
@@ -1432,20 +1430,23 @@ void AgroComplexItem::_inflateExclusionZones(const QList<QPolygonF>& exclusionPo
             ));
         }
 
-        // ВАЖНО: ClipperOffset ожидает корректную ориентацию.
-        // Если полигон вывернут, отступ может уйти "внутрь" вместо "наружу".
+        // ClipperOffset требует правильной ориентации (по часовой стрелке для внешних контуров)
         if (!ClipperLib::Orientation(path)) {
             ClipperLib::ReversePath(path);
         }
 
-        offsetter.AddPath(path, ClipperLib::jtRound, ClipperLib::etClosedPolygon);
+        // ИСПОЛЬЗУЕМ jtMiter вместо jtRound.
+        // Это убирает "зубья" (десятки точек на скруглении) и заменяет их на один четкий угол.
+        offsetter.AddPath(path, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
     }
 
     ClipperLib::Paths solution;
-    // Execute принимает (результат, дельта * масштаб)
+    // Выполняем раздутие (отступ)
     offsetter.Execute(solution, marginMeters * scale);
 
     for (const ClipperLib::Path& outPath : solution) {
+        if (outPath.size() < 3) continue;
+
         QPolygonF inflatedPoly;
         for (const ClipperLib::IntPoint& pt : outPath) {
             inflatedPoly << QPointF(
@@ -1454,15 +1455,16 @@ void AgroComplexItem::_inflateExclusionZones(const QList<QPolygonF>& exclusionPo
             );
         }
 
+        // Замыкаем полигон для корректного отображения в QGC
         if (!inflatedPoly.isEmpty()) {
             if (inflatedPoly.first() != inflatedPoly.last()) {
-                inflatedPoly << inflatedPoly.first(); // Замыкаем для QGC
+                inflatedPoly << inflatedPoly.first();
             }
             inflatedPolygonsNED.append(inflatedPoly);
         }
     }
 
-    qCDebug(AgroComplexItemLog) << "Inclusion margin applied:" << marginMeters
+    qCDebug(AgroComplexItemLog) << "Inclusion margin applied (Miter):" << marginMeters
                                 << "Original zones:" << exclusionPolygonsNED.count()
                                 << "Inflated zones:" << inflatedPolygonsNED.count();
 }
