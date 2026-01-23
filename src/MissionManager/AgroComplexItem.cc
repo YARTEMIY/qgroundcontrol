@@ -34,6 +34,10 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     , _gridAngleFact            (settingsGroup, _metaDataMap[gridAngleName])
     , _flyAlternateTransectsFact(settingsGroup, _metaDataMap[flyAlternateTransectsName])
     , _splitConcavePolygonsFact (settingsGroup, _metaDataMap[splitConcavePolygonsName])
+    , _vehicleSpeedFact         (settingsGroup, _metaDataMap[vehicleSpeedName])
+    , _actuatorIdFact           (settingsGroup, _metaDataMap[actuatorIdName])
+    , _actuatorValOnFact        (settingsGroup, _metaDataMap[actuatorValOnName])
+    , _actuatorValOffFact       (settingsGroup, _metaDataMap[actuatorValOffName])
     , _entryPoint               (EntryLocationTopLeft)
 {
     _editorQml = "qrc:/qml/QGroundControl/Controls/AgroItemEditor.qml";
@@ -51,11 +55,19 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     connect(&_gridAngleFact,            &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_flyAlternateTransectsFact,&Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_splitConcavePolygonsFact, &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
+    connect(&_vehicleSpeedFact,         &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
+    connect(&_actuatorIdFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
+    connect(&_actuatorValOnFact,        &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
+    connect(&_actuatorValOffFact,       &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(this,                       &AgroComplexItem::refly90DegreesChanged,  this, &AgroComplexItem::_setDirty);
 
     connect(&_gridAngleFact,            &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_flyAlternateTransectsFact,&Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_splitConcavePolygonsFact, &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
+    connect(&_vehicleSpeedFact,         &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
+    connect(&_actuatorIdFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
+    connect(&_actuatorValOnFact,        &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
+    connect(&_actuatorValOffFact,       &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(this,                       &AgroComplexItem::refly90DegreesChanged,  this, &AgroComplexItem::_rebuildTransects);
 
     connect(&_surveyAreaPolygon,        &QGCMapPolygon::isValidChanged,             this, &AgroComplexItem::_updateWizardMode);
@@ -70,18 +82,57 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
 
 void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool active)
 {
-    float turnOn = 1.0f;
-    float turnOff = -1.0f;
+    MAV_AUTOPILOT firmwareType = _controllerVehicle ? _controllerVehicle->firmwareType() : MAV_AUTOPILOT_GENERIC;
 
-    float actuatorValue = active ? turnOn : turnOff;
+    MAV_CMD command;
+    double param1 = qQNaN();
+    double param2 = qQNaN();
+    double param3 = qQNaN();
+    double param4 = qQNaN();
+    double param5 = qQNaN();
+    double param6 = qQNaN();
+    double param7 = qQNaN();
+
+
+    int actId = _actuatorIdFact.rawValue().toInt();
+    double targetValue = active ? _actuatorValOnFact.rawValue().toDouble() : _actuatorValOffFact.rawValue().toDouble();
+
+    if (firmwareType == MAV_AUTOPILOT_ARDUPILOTMEGA) {
+        command = MAV_CMD_DO_SET_SERVO;
+        param1 = targetValue;
+    } else if (firmwareType == MAV_AUTOPILOT_PX4){
+
+        command = MAV_CMD_DO_SET_ACTUATOR;
+
+        switch(actId) {
+            case 1:
+                param1 = targetValue;
+                break;
+            case 2:
+                param2 = targetValue;
+                break;
+            case 3:
+                param3 = targetValue;
+                break;
+            case 4:
+                param4 = targetValue;
+                break;
+            case 5:
+                param5 = targetValue;
+                break;
+            case 6:
+                param6 = targetValue;
+                break;
+            default:
+                param1 = targetValue;
+                break;
+        }
+    }
 
     MissionItem* item = new MissionItem(seqNum++,
-                                        MAV_CMD_DO_SET_ACTUATOR,
+                                        command,
                                         MAV_FRAME_MISSION,
-                                        actuatorValue,
-                                        0,
-                                        0,
-                                        0, 0, 0, 0,
+                                        param1, param2, param3, param4, param5, param6, param7,
                                         true,
                                         false,
                                         missionItemParent);
@@ -96,6 +147,20 @@ void AgroComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* mi
     }
 
     int seqNum = _sequenceNumber;
+
+    double speed = _vehicleSpeedFact.rawValue().toDouble();
+    if (speed > 0) {
+        MissionItem* speedItem = new MissionItem(seqNum++,
+                                                 MAV_CMD_DO_CHANGE_SPEED,
+                                                 MAV_FRAME_MISSION,
+                                                 1,
+                                                 speed,
+                                                 -1, 0, 0, 0, 0,
+                                                 true,
+                                                 false,
+                                                 missionItemParent);
+        items.append(speedItem);
+    }
 
     MAV_FRAME mavFrame = MAV_FRAME_GLOBAL_RELATIVE_ALT;
     _appendSprayerCommand(items, missionItemParent, seqNum, false);
@@ -152,6 +217,10 @@ void AgroComplexItem::_saveCommon(QJsonObject& saveObject)
     saveObject[_jsonGridAngleKey] =                             _gridAngleFact.rawValue().toDouble();
     saveObject[_jsonFlyAlternateTransectsKey] =                 _flyAlternateTransectsFact.rawValue().toBool();
     saveObject[_jsonSplitConcavePolygonsKey] =                  _splitConcavePolygonsFact.rawValue().toBool();
+    saveObject[_jsonVehicleSpeedKey] =                          _vehicleSpeedFact.rawValue().toDouble();
+    saveObject[_jsonActuatorIdKey] =                            _actuatorIdFact.rawValue().toInt();
+    saveObject[_jsonActuatorValOnKey] =                         _actuatorValOnFact.rawValue().toDouble();
+    saveObject[_jsonActuatorValOffKey] =                        _actuatorValOffFact.rawValue().toDouble();
     saveObject[_jsonEntryPointKey] =                            _entryPoint;
 
     // Polygon shape
@@ -224,6 +293,10 @@ bool AgroComplexItem::_loadV4V5(const QJsonObject& complexObject, int sequenceNu
         { _jsonEntryPointKey,                           QJsonValue::Double, true },
         { _jsonGridAngleKey,                            QJsonValue::Double, true },
         { _jsonFlyAlternateTransectsKey,                QJsonValue::Bool,   false },
+        { _jsonVehicleSpeedKey,                         QJsonValue::Double, false },
+        { _jsonActuatorIdKey,                           QJsonValue::Double, false },
+        { _jsonActuatorValOnKey,                        QJsonValue::Double, false },
+        { _jsonActuatorValOffKey,                       QJsonValue::Double, false },
     };
 
     if(version == 5) {
@@ -264,6 +337,15 @@ bool AgroComplexItem::_loadV4V5(const QJsonObject& complexObject, int sequenceNu
     if (version == 5) {
         _splitConcavePolygonsFact.setRawValue   (complexObject[_jsonSplitConcavePolygonsKey].toBool(true));
     }
+
+    if (complexObject.contains(_jsonVehicleSpeedKey))
+        _vehicleSpeedFact.setRawValue(complexObject[_jsonVehicleSpeedKey].toDouble());
+    if (complexObject.contains(_jsonActuatorIdKey))
+        _actuatorIdFact.setRawValue(complexObject[_jsonActuatorIdKey].toInt());
+    if (complexObject.contains(_jsonActuatorValOnKey))
+        _actuatorValOnFact.setRawValue(complexObject[_jsonActuatorValOnKey].toDouble());
+    if (complexObject.contains(_jsonActuatorValOffKey))
+        _actuatorValOffFact.setRawValue(complexObject[_jsonActuatorValOffKey].toDouble());
 
     _entryPoint = complexObject[_jsonEntryPointKey].toInt();
 

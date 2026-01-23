@@ -32,10 +32,18 @@ public:
     Q_PROPERTY(Fact*            flyAlternateTransects  READ flyAlternateTransects  CONSTANT)
     Q_PROPERTY(Fact*            splitConcavePolygons   READ splitConcavePolygons   CONSTANT)
     Q_PROPERTY(QGeoCoordinate   centerCoordinate       READ centerCoordinate       WRITE setCenterCoordinate)
+    Q_PROPERTY(Fact*            vehicleSpeed           READ vehicleSpeed           CONSTANT)
+    Q_PROPERTY(Fact*            actuatorId             READ actuatorId             CONSTANT)
+    Q_PROPERTY(Fact*            actuatorValOn          READ actuatorValOn          CONSTANT)
+    Q_PROPERTY(Fact*            actuatorValOff         READ actuatorValOff         CONSTANT)
 
     Fact* gridAngle             (void) { return &_gridAngleFact; }
     Fact* flyAlternateTransects (void) { return &_flyAlternateTransectsFact; }
     Fact* splitConcavePolygons  (void) { return &_splitConcavePolygonsFact; }
+    Fact* vehicleSpeed          (void) { return &_vehicleSpeedFact; }
+    Fact* actuatorId            (void) { return &_actuatorIdFact; }
+    Fact* actuatorValOn         (void) { return &_actuatorValOnFact; }
+    Fact* actuatorValOff        (void) { return &_actuatorValOffFact; }
 
     Q_INVOKABLE void rotateEntryPoint(void);
 
@@ -84,6 +92,10 @@ public:
     static constexpr const char* gridEntryLocationName =      "GridEntryLocation";
     static constexpr const char* flyAlternateTransectsName =  "FlyAlternateTransects";
     static constexpr const char* splitConcavePolygonsName =   "SplitConcavePolygons";
+    static constexpr const char* vehicleSpeedName =           "VehicleSpeed";
+    static constexpr const char* actuatorIdName =             "ActuatorId";
+    static constexpr const char* actuatorValOnName =          "ActuatorValOn";
+    static constexpr const char* actuatorValOffName =         "ActuatorValOff";
 
 signals:
     void refly90DegreesChanged(bool refly90Degrees);
@@ -151,6 +163,10 @@ private:
     SettingsFact    _gridAngleFact;
     SettingsFact    _flyAlternateTransectsFact;
     SettingsFact    _splitConcavePolygonsFact;
+    SettingsFact    _vehicleSpeedFact;
+    SettingsFact    _actuatorIdFact;
+    SettingsFact    _actuatorValOnFact;
+    SettingsFact    _actuatorValOffFact;
     int             _entryPoint;
 
     static constexpr const char* _jsonGridAngleKey =          "angle";
@@ -183,4 +199,8 @@ private:
     static constexpr const char* _jsonV3Refly90DegreesKey =               "refly90Degrees";
     static constexpr const char* _jsonFlyAlternateTransectsKey =          "flyAlternateTransects";
     static constexpr const char* _jsonSplitConcavePolygonsKey =           "splitConcavePolygons";
+    static constexpr const char* _jsonVehicleSpeedKey =       "vehicleSpeed";
+    static constexpr const char* _jsonActuatorIdKey =         "actuatorId";
+    static constexpr const char* _jsonActuatorValOnKey =      "actuatorValOn";
+    static constexpr const char* _jsonActuatorValOffKey =     "actuatorValOff";
 };

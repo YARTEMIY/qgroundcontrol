@@ -4,12 +4,8 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 
 import QGroundControl
-
-
 import QGroundControl.Controls
-
 import QGroundControl.FactControls
-
 import QGroundControl.FlightMap
 
 TransectStyleComplexItemEditor {
@@ -18,10 +14,6 @@ TransectStyleComplexItemEditor {
     transectValuesHeaderName:       qsTr("Agro Settings")
     transectValuesComponent:        _transectValuesComponent
     presetsTransectValuesComponent: _transectValuesComponent
-
-    // The following properties must be available up the hierarchy chain
-    //  property real   availableWidth    ///< Width for control
-    //  property var    missionItem       ///< Mission Item for editor
 
     property real   _margin:        ScreenTools.defaultFontPixelWidth / 2
     property var    _missionItem:   missionItem
@@ -53,6 +45,46 @@ TransectStyleComplexItemEditor {
                 onValueChanged:         missionItem.gridAngle.value = value
                 Component.onCompleted:  value = missionItem.gridAngle.value
                 live: true
+            }
+
+            QGCLabel { text: qsTr("Flight Speed") }
+            FactTextField {
+                fact:               missionItem.vehicleSpeed
+                Layout.fillWidth:   true
+            }
+
+            // --- New Sprayer / Actuator Settings ---
+            QGCLabel {
+                text: qsTr("Actuator ID")
+                Layout.columnSpan: 2
+                font.bold: true
+            }
+
+            QGCLabel { text: qsTr("ID (1-6)") }
+            FactTextField {
+                fact:               missionItem.actuatorId
+                Layout.fillWidth:   true
+            }
+
+            QGCLabel { text: qsTr("Value ON") }
+            FactTextField {
+                fact:               missionItem.actuatorValOn
+                Layout.fillWidth:   true
+            }
+
+            QGCLabel { text: qsTr("Value OFF") }
+            FactTextField {
+                fact:               missionItem.actuatorValOff
+                Layout.fillWidth:   true
+            }
+
+            // --- Separator ---
+            Rectangle {
+                Layout.columnSpan:  2
+                Layout.fillWidth:   true
+                height:             1
+                color:              QGroundControl.globalPalette.text
+                opacity:            0.2
             }
 
             QGCLabel {

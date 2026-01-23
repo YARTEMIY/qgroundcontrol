@@ -25,6 +25,38 @@
     "type":             "bool",
     "default":     false,
     "comment":      "Although this setting is here, the code for it is disabled since it was not working."
+},
+{
+    "name":             "VehicleSpeed",
+    "shortDesc": "Flight speed during survey.",
+    "type":             "double",
+    "units":            "m/s",
+    "min":              0.5,
+    "max":              20.0,
+    "decimalPlaces":    1,
+    "default":          5.0
+},
+{
+    "name":             "ActuatorId",
+    "shortDesc": "Servo/Actuator output channel ID.",
+    "type":             "int32",
+    "min":              1,
+    "max":              6,
+    "default":          1
+},
+{
+    "name":             "ActuatorValOn",
+    "shortDesc": "Normalized value when Sprayer is ON.",
+    "type":             "double",
+    "decimalPlaces":    1,
+    "default":          1.0
+},
+{
+    "name":             "ActuatorValOff",
+    "shortDesc": "Normalized value when Sprayer is OFF.",
+    "type":             "double",
+    "decimalPlaces":    1,
+    "default":          -1.0
 }
 ]
 }
