@@ -51,34 +51,90 @@ TransectStyleComplexItemEditor {
             FactTextField {
                 fact:               missionItem.vehicleSpeed
                 Layout.fillWidth:   true
+                unitsLabel:         "m/s"
             }
 
-            // --- New Sprayer / Actuator Settings ---
-            QGCLabel {
-                text: qsTr("Actuator ID")
+            Rectangle {
+                Layout.columnSpan: 2; Layout.fillWidth: true; height: 1
+                color: QGroundControl.globalPalette.text; opacity: 0.5
+                Layout.topMargin: _margin; Layout.bottomMargin: _margin
+            }
+            QGCLabel { text: qsTr("Sprayer Setup (PX4 Actuators)"); font.bold: true; Layout.columnSpan: 2 }
+
+            QGCCheckBox {
+                text: qsTr("Enable Sprayer"); checked: missionItem.sprayEnabled.value
+                onClicked: missionItem.sprayEnabled.value = checked
                 Layout.columnSpan: 2
-                font.bold: true
             }
 
-            QGCLabel { text: qsTr("ID (1-6)") }
+            QGCLabel { text: qsTr("Pump Actuator ID (1-6)") }
             FactTextField {
-                fact:               missionItem.actuatorId
-                Layout.fillWidth:   true
+                fact: missionItem.pumpActuatorId
+                Layout.fillWidth: true
+                enabled: missionItem.sprayEnabled.value
             }
 
-            QGCLabel { text: qsTr("Value ON") }
+            QGCLabel { text: qsTr("Spinner Actuator ID (1-6)") }
             FactTextField {
-                fact:               missionItem.actuatorValOn
-                Layout.fillWidth:   true
+                fact: missionItem.spinnerActuatorId
+                Layout.fillWidth: true
+                enabled: missionItem.sprayEnabled.value
             }
 
-            QGCLabel { text: qsTr("Value OFF") }
+            QGCLabel {
+                text: qsTr("Pump Logic Mode"); font.bold: true; Layout.columnSpan: 2; Layout.topMargin: _margin
+            }
+
+            QGCCheckBox {
+                id: varRateCheck
+                text: qsTr("Use Speed Dependent Rate")
+                checked: missionItem.pumpRate.value > 0.001
+                onClicked: {
+                    if (checked) {
+                        missionItem.pumpRate.value = 0.2
+                    } else {
+                        missionItem.pumpRate.value = 0.0
+                    }
+                }
+                Layout.columnSpan: 2
+                enabled: missionItem.sprayEnabled.value
+            }
+
+            QGCLabel { text: qsTr("Pump ON Value (-1 to 1)") }
             FactTextField {
-                fact:               missionItem.actuatorValOff
-                Layout.fillWidth:   true
+                fact: missionItem.pumpFixedValue
+                Layout.fillWidth: true
+                enabled: missionItem.sprayEnabled.value && !varRateCheck.checked
             }
 
-            // --- Separator ---
+            QGCLabel { text: qsTr("Pump Rate (% per m/s)") }
+            FactTextField {
+                fact: missionItem.pumpRate
+                Layout.fillWidth: true
+                enabled: missionItem.sprayEnabled.value && varRateCheck.checked
+            }
+
+            QGCLabel { text: qsTr("Min Pump Output (%)") }
+            FactTextField {
+                fact: missionItem.minPump
+                Layout.fillWidth: true
+                enabled: missionItem.sprayEnabled.value && varRateCheck.checked
+            }
+
+            QGCLabel { text: qsTr("Min Speed (m/s)") }
+            FactTextField {
+                fact: missionItem.minSpeed
+                Layout.fillWidth: true
+                enabled: missionItem.sprayEnabled.value && varRateCheck.checked
+            }
+
+            QGCLabel { text: qsTr("Spinner Speed") }
+            FactTextField {
+                fact: missionItem.spinnerPWM
+                Layout.fillWidth: true
+                enabled: missionItem.sprayEnabled.value
+            }
+
             Rectangle {
                 Layout.columnSpan:  2
                 Layout.fillWidth:   true

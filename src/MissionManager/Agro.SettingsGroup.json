@@ -21,10 +21,9 @@
 },
 {
     "name":             "SplitConcavePolygons",
-    "shortDesc": "Split mission concave polygons into separate regular, convex polygons.",
+    "shortDesc": "Split mission concave polygons.",
     "type":             "bool",
-    "default":     false,
-    "comment":      "Although this setting is here, the code for it is disabled since it was not working."
+    "default":     false
 },
 {
     "name":             "VehicleSpeed",
@@ -32,31 +31,71 @@
     "type":             "double",
     "units":            "m/s",
     "min":              0.5,
-    "max":              20.0,
+    "max":              30.0,
     "decimalPlaces":    1,
     "default":          5.0
 },
 {
-    "name":             "ActuatorId",
-    "shortDesc": "Servo/Actuator output channel ID.",
+    "name":             "SprayEnabled",
+    "shortDesc": "Enable Sprayer generation.",
+    "type":             "bool",
+    "default":          true
+},
+{
+    "name":             "PumpActuatorId",
+    "shortDesc": "Pump Actuator Output ID (1-6).",
     "type":             "int32",
     "min":              1,
     "max":              6,
     "default":          1
 },
 {
-    "name":             "ActuatorValOn",
-    "shortDesc": "Normalized value when Sprayer is ON.",
+    "name":             "SpinnerActuatorId",
+    "shortDesc": "Spinner Actuator Output ID (1-6).",
+    "type":             "int32",
+    "min":              0,
+    "max":              6,
+    "default":          2
+},
+{
+    "name":             "PumpFixedValue",
+    "shortDesc": "Value for Pump when ON (Fixed mode).",
     "type":             "double",
-    "decimalPlaces":    1,
+    "decimalPlaces":    2,
+    "min":              -1.0,
+    "max":              1.0,
     "default":          1.0
 },
 {
-    "name":             "ActuatorValOff",
-    "shortDesc": "Normalized value when Sprayer is OFF.",
+    "name":             "PumpRate",
+    "shortDesc": "Pump rate per 1m/s speed (Slope).",
     "type":             "double",
-    "decimalPlaces":    1,
-    "default":          -1.0
+    "units":            "%/m/s",
+    "decimalPlaces":    2,
+    "default":          0.2
+},
+{
+    "name":             "SpinnerPWM",
+    "shortDesc": "Spinner speed (Normalized -1..1).",
+    "type":             "double",
+    "decimalPlaces":    2,
+    "default":          0.8
+},
+{
+    "name":             "MinPump",
+    "shortDesc": "Minimum Pump output %.",
+    "type":             "double",
+    "units":            "%",
+    "min":              0.0,
+    "max":              100.0,
+    "default":          10.0
+},
+{
+    "name":             "MinSpeed",
+    "shortDesc": "Min speed to spray.",
+    "type":             "double",
+    "units":            "m/s",
+    "default":          1.0
 }
 ]
 }

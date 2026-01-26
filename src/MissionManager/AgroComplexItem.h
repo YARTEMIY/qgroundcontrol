@@ -33,17 +33,27 @@ public:
     Q_PROPERTY(Fact*            splitConcavePolygons   READ splitConcavePolygons   CONSTANT)
     Q_PROPERTY(QGeoCoordinate   centerCoordinate       READ centerCoordinate       WRITE setCenterCoordinate)
     Q_PROPERTY(Fact*            vehicleSpeed           READ vehicleSpeed           CONSTANT)
-    Q_PROPERTY(Fact*            actuatorId             READ actuatorId             CONSTANT)
-    Q_PROPERTY(Fact*            actuatorValOn          READ actuatorValOn          CONSTANT)
-    Q_PROPERTY(Fact*            actuatorValOff         READ actuatorValOff         CONSTANT)
+    Q_PROPERTY(Fact*            sprayEnabled           READ sprayEnabled           CONSTANT)
+    Q_PROPERTY(Fact*            pumpActuatorId         READ pumpActuatorId         CONSTANT)
+    Q_PROPERTY(Fact*            spinnerActuatorId      READ spinnerActuatorId      CONSTANT)
+    Q_PROPERTY(Fact*            pumpFixedValue         READ pumpFixedValue         CONSTANT)
+    Q_PROPERTY(Fact*            pumpRate               READ pumpRate               CONSTANT)
+    Q_PROPERTY(Fact*            spinnerPWM             READ spinnerPWM             CONSTANT)
+    Q_PROPERTY(Fact*            minPump                READ minPump                CONSTANT)
+    Q_PROPERTY(Fact*            minSpeed               READ minSpeed               CONSTANT)
 
     Fact* gridAngle             (void) { return &_gridAngleFact; }
     Fact* flyAlternateTransects (void) { return &_flyAlternateTransectsFact; }
     Fact* splitConcavePolygons  (void) { return &_splitConcavePolygonsFact; }
     Fact* vehicleSpeed          (void) { return &_vehicleSpeedFact; }
-    Fact* actuatorId            (void) { return &_actuatorIdFact; }
-    Fact* actuatorValOn         (void) { return &_actuatorValOnFact; }
-    Fact* actuatorValOff        (void) { return &_actuatorValOffFact; }
+    Fact* sprayEnabled          (void) { return &_sprayEnabledFact; }
+    Fact* pumpActuatorId        (void) { return &_pumpActuatorIdFact; }
+    Fact* spinnerActuatorId     (void) { return &_spinnerActuatorIdFact; }
+    Fact* pumpFixedValue        (void) { return &_pumpFixedValueFact; }
+    Fact* pumpRate              (void) { return &_pumpRateFact; }
+    Fact* spinnerPWM            (void) { return &_spinnerPWMFact; }
+    Fact* minPump               (void) { return &_minPumpFact; }
+    Fact* minSpeed              (void) { return &_minSpeedFact; }
 
     Q_INVOKABLE void rotateEntryPoint(void);
 
@@ -93,9 +103,14 @@ public:
     static constexpr const char* flyAlternateTransectsName =  "FlyAlternateTransects";
     static constexpr const char* splitConcavePolygonsName =   "SplitConcavePolygons";
     static constexpr const char* vehicleSpeedName =           "VehicleSpeed";
-    static constexpr const char* actuatorIdName =             "ActuatorId";
-    static constexpr const char* actuatorValOnName =          "ActuatorValOn";
-    static constexpr const char* actuatorValOffName =         "ActuatorValOff";
+    static constexpr const char* sprayEnabledName =           "SprayEnabled";
+    static constexpr const char* pumpActuatorIdName =         "PumpActuatorId";
+    static constexpr const char* spinnerActuatorIdName =      "SpinnerActuatorId";
+    static constexpr const char* pumpFixedValueName =         "PumpFixedValue";
+    static constexpr const char* pumpRateName =               "PumpRate";
+    static constexpr const char* spinnerPWMName =             "SpinnerPWM";
+    static constexpr const char* minPumpName =                "MinPump";
+    static constexpr const char* minSpeedName =               "MinSpeed";
 
 signals:
     void refly90DegreesChanged(bool refly90Degrees);
@@ -164,9 +179,14 @@ private:
     SettingsFact    _flyAlternateTransectsFact;
     SettingsFact    _splitConcavePolygonsFact;
     SettingsFact    _vehicleSpeedFact;
-    SettingsFact    _actuatorIdFact;
-    SettingsFact    _actuatorValOnFact;
-    SettingsFact    _actuatorValOffFact;
+    SettingsFact    _sprayEnabledFact;
+    SettingsFact    _pumpActuatorIdFact;
+    SettingsFact    _spinnerActuatorIdFact;
+    SettingsFact    _pumpFixedValueFact;
+    SettingsFact    _pumpRateFact;
+    SettingsFact    _spinnerPWMFact;
+    SettingsFact    _minPumpFact;
+    SettingsFact    _minSpeedFact;
     int             _entryPoint;
 
     static constexpr const char* _jsonGridAngleKey =          "angle";
@@ -199,8 +219,13 @@ private:
     static constexpr const char* _jsonV3Refly90DegreesKey =               "refly90Degrees";
     static constexpr const char* _jsonFlyAlternateTransectsKey =          "flyAlternateTransects";
     static constexpr const char* _jsonSplitConcavePolygonsKey =           "splitConcavePolygons";
-    static constexpr const char* _jsonVehicleSpeedKey =       "vehicleSpeed";
-    static constexpr const char* _jsonActuatorIdKey =         "actuatorId";
-    static constexpr const char* _jsonActuatorValOnKey =      "actuatorValOn";
-    static constexpr const char* _jsonActuatorValOffKey =     "actuatorValOff";
+    static constexpr const char* _jsonVehicleSpeedKey =                   "vehicleSpeed";
+    static constexpr const char* _jsonSprayEnabledKey =                   "sprayEnabled";
+    static constexpr const char* _jsonPumpActuatorIdKey =                 "pumpActuatorId";
+    static constexpr const char* _jsonSpinnerActuatorIdKey =              "spinnerActuatorId";
+    static constexpr const char* _jsonPumpFixedValueKey =                 "pumpFixedValue";
+    static constexpr const char* _jsonPumpRateKey =                       "pumpRate";
+    static constexpr const char* _jsonSpinnerPWMKey =                     "spinnerPWM";
+    static constexpr const char* _jsonMinPumpKey =                        "minPump";
+    static constexpr const char* _jsonMinSpeedKey =                       "minSpeed";
 };

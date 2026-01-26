@@ -35,9 +35,14 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     , _flyAlternateTransectsFact(settingsGroup, _metaDataMap[flyAlternateTransectsName])
     , _splitConcavePolygonsFact (settingsGroup, _metaDataMap[splitConcavePolygonsName])
     , _vehicleSpeedFact         (settingsGroup, _metaDataMap[vehicleSpeedName])
-    , _actuatorIdFact           (settingsGroup, _metaDataMap[actuatorIdName])
-    , _actuatorValOnFact        (settingsGroup, _metaDataMap[actuatorValOnName])
-    , _actuatorValOffFact       (settingsGroup, _metaDataMap[actuatorValOffName])
+    , _sprayEnabledFact         (settingsGroup, _metaDataMap[sprayEnabledName])
+    , _pumpActuatorIdFact       (settingsGroup, _metaDataMap[pumpActuatorIdName])
+    , _spinnerActuatorIdFact    (settingsGroup, _metaDataMap[spinnerActuatorIdName])
+    , _pumpFixedValueFact       (settingsGroup, _metaDataMap[pumpFixedValueName])
+    , _pumpRateFact             (settingsGroup, _metaDataMap[pumpRateName])
+    , _spinnerPWMFact           (settingsGroup, _metaDataMap[spinnerPWMName])
+    , _minPumpFact              (settingsGroup, _metaDataMap[minPumpName])
+    , _minSpeedFact             (settingsGroup, _metaDataMap[minSpeedName])
     , _entryPoint               (EntryLocationTopLeft)
 {
     _editorQml = "qrc:/qml/QGroundControl/Controls/AgroItemEditor.qml";
@@ -56,18 +61,27 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     connect(&_flyAlternateTransectsFact,&Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_splitConcavePolygonsFact, &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_vehicleSpeedFact,         &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
-    connect(&_actuatorIdFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
-    connect(&_actuatorValOnFact,        &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
-    connect(&_actuatorValOffFact,       &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
+    connect(&_sprayEnabledFact,         &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
+    connect(&_pumpActuatorIdFact,       &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
+    connect(&_spinnerActuatorIdFact,    &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
+    connect(&_pumpFixedValueFact,       &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
+    connect(&_pumpRateFact,             &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
+    connect(&_spinnerPWMFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
+    connect(&_minPumpFact,              &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
+    connect(&_minSpeedFact,             &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(this,                       &AgroComplexItem::refly90DegreesChanged,  this, &AgroComplexItem::_setDirty);
 
     connect(&_gridAngleFact,            &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_flyAlternateTransectsFact,&Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_splitConcavePolygonsFact, &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_vehicleSpeedFact,         &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
-    connect(&_actuatorIdFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
-    connect(&_actuatorValOnFact,        &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
-    connect(&_actuatorValOffFact,       &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
+    connect(&_sprayEnabledFact,         &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
+    connect(&_pumpActuatorIdFact,       &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
+    connect(&_spinnerActuatorIdFact,    &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
+    connect(&_pumpFixedValueFact,       &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
+    connect(&_pumpRateFact,             &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
+    connect(&_spinnerPWMFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
+    connect(&_minPumpFact,              &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(this,                       &AgroComplexItem::refly90DegreesChanged,  this, &AgroComplexItem::_rebuildTransects);
 
     connect(&_surveyAreaPolygon,        &QGCMapPolygon::isValidChanged,             this, &AgroComplexItem::_updateWizardMode);
@@ -82,57 +96,76 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
 
 void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool active)
 {
+    if (!_sprayEnabledFact.rawValue().toBool()) {
+        return;
+    }
+
     MAV_AUTOPILOT firmwareType = _controllerVehicle ? _controllerVehicle->firmwareType() : MAV_AUTOPILOT_GENERIC;
-
     MAV_CMD command;
-    double param1 = qQNaN();
-    double param2 = qQNaN();
-    double param3 = qQNaN();
-    double param4 = qQNaN();
-    double param5 = qQNaN();
-    double param6 = qQNaN();
-    double param7 = qQNaN();
 
-
-    int actId = _actuatorIdFact.rawValue().toInt();
-    double targetValue = active ? _actuatorValOnFact.rawValue().toDouble() : _actuatorValOffFact.rawValue().toDouble();
+    double params[7];
+    for(int i=0; i<7; i++) params[i] = qQNaN();
 
     if (firmwareType == MAV_AUTOPILOT_ARDUPILOTMEGA) {
         command = MAV_CMD_DO_SET_SERVO;
-        param1 = targetValue;
-    } else if (firmwareType == MAV_AUTOPILOT_PX4){
-
+        int pumpId = _pumpActuatorIdFact.rawValue().toInt();
+        double pwmVal = active ? _pumpFixedValueFact.rawValue().toDouble() : 1000.0;
+        params[0] = (double)pumpId;
+        params[1] = pwmVal;
+    } else {
         command = MAV_CMD_DO_SET_ACTUATOR;
 
-        switch(actId) {
-            case 1:
-                param1 = targetValue;
-                break;
-            case 2:
-                param2 = targetValue;
-                break;
-            case 3:
-                param3 = targetValue;
-                break;
-            case 4:
-                param4 = targetValue;
-                break;
-            case 5:
-                param5 = targetValue;
-                break;
-            case 6:
-                param6 = targetValue;
-                break;
-            default:
-                param1 = targetValue;
-                break;
+        double pumpValue = -1.0;
+        double spinnerValue = -1.0;
+
+        if (active) {
+            double rate = _pumpRateFact.rawValue().toDouble();
+
+            if (rate > 0.001) {
+                double speed = _vehicleSpeedFact.rawValue().toDouble();
+                double minSpeed = _minSpeedFact.rawValue().toDouble();
+
+                if (speed >= minSpeed) {
+                    double rateFactor = rate / 100.0;
+
+                    double calculatedPower01 = speed * rateFactor;
+
+                    double minPump01 = _minPumpFact.rawValue().toDouble() / 100.0;
+
+                    if (calculatedPower01 < minPump01) {
+                        calculatedPower01 = minPump01;
+                    }
+                    if (calculatedPower01 > 1.0) {
+                        calculatedPower01 = 1.0;
+                    }
+
+                    pumpValue = (calculatedPower01 * 2.0) - 1.0;
+
+                } else {
+                    pumpValue = -1.0;
+                }
+            } else {
+                pumpValue = _pumpFixedValueFact.rawValue().toDouble();
+            }
+
+            spinnerValue = _spinnerPWMFact.rawValue().toDouble();
+
+        } else {
+            pumpValue = -1.0;
+            spinnerValue = -1.0;
         }
+
+        int pumpId = _pumpActuatorIdFact.rawValue().toInt();
+        int spinnerId = _spinnerActuatorIdFact.rawValue().toInt();
+
+        if (pumpId >= 1 && pumpId <= 6) params[pumpId - 1] = pumpValue;
+        if (spinnerId >= 1 && spinnerId <= 6) params[spinnerId - 1] = spinnerValue;
     }
 
     MissionItem* item = new MissionItem(seqNum++,
                                         command,
                                         MAV_FRAME_MISSION,
-                                        param1, param2, param3, param4, param5, param6, param7,
+                                        params[0], params[1], params[2], params[3], params[4], params[5], 0,
                                         true,
                                         false,
                                         missionItemParent);
@@ -218,9 +251,14 @@ void AgroComplexItem::_saveCommon(QJsonObject& saveObject)
     saveObject[_jsonFlyAlternateTransectsKey] =                 _flyAlternateTransectsFact.rawValue().toBool();
     saveObject[_jsonSplitConcavePolygonsKey] =                  _splitConcavePolygonsFact.rawValue().toBool();
     saveObject[_jsonVehicleSpeedKey] =                          _vehicleSpeedFact.rawValue().toDouble();
-    saveObject[_jsonActuatorIdKey] =                            _actuatorIdFact.rawValue().toInt();
-    saveObject[_jsonActuatorValOnKey] =                         _actuatorValOnFact.rawValue().toDouble();
-    saveObject[_jsonActuatorValOffKey] =                        _actuatorValOffFact.rawValue().toDouble();
+    saveObject[_jsonSprayEnabledKey] =                          _sprayEnabledFact.rawValue().toBool();
+    saveObject[_jsonPumpActuatorIdKey] =                        _pumpActuatorIdFact.rawValue().toInt();
+    saveObject[_jsonSpinnerActuatorIdKey] =                     _spinnerActuatorIdFact.rawValue().toInt();
+    saveObject[_jsonPumpFixedValueKey] =                        _pumpFixedValueFact.rawValue().toDouble();
+    saveObject[_jsonPumpRateKey] =                              _pumpRateFact.rawValue().toDouble();
+    saveObject[_jsonSpinnerPWMKey] =                            _spinnerPWMFact.rawValue().toDouble();
+    saveObject[_jsonMinPumpKey] =                               _minPumpFact.rawValue().toDouble();
+    saveObject[_jsonMinSpeedKey] =                              _minSpeedFact.rawValue().toDouble();
     saveObject[_jsonEntryPointKey] =                            _entryPoint;
 
     // Polygon shape
@@ -294,9 +332,14 @@ bool AgroComplexItem::_loadV4V5(const QJsonObject& complexObject, int sequenceNu
         { _jsonGridAngleKey,                            QJsonValue::Double, true },
         { _jsonFlyAlternateTransectsKey,                QJsonValue::Bool,   false },
         { _jsonVehicleSpeedKey,                         QJsonValue::Double, false },
-        { _jsonActuatorIdKey,                           QJsonValue::Double, false },
-        { _jsonActuatorValOnKey,                        QJsonValue::Double, false },
-        { _jsonActuatorValOffKey,                       QJsonValue::Double, false },
+        { _jsonSprayEnabledKey,                         QJsonValue::Bool,   false },
+        { _jsonPumpActuatorIdKey,                       QJsonValue::Double, false },
+        { _jsonSpinnerActuatorIdKey,                    QJsonValue::Double, false },
+        { _jsonPumpFixedValueKey,                       QJsonValue::Double, false },
+        { _jsonPumpRateKey,                             QJsonValue::Double, false },
+        { _jsonSpinnerPWMKey,                           QJsonValue::Double, false },
+        { _jsonMinPumpKey,                              QJsonValue::Double, false },
+        { _jsonMinSpeedKey,                             QJsonValue::Double, false },
     };
 
     if(version == 5) {
@@ -338,15 +381,33 @@ bool AgroComplexItem::_loadV4V5(const QJsonObject& complexObject, int sequenceNu
         _splitConcavePolygonsFact.setRawValue   (complexObject[_jsonSplitConcavePolygonsKey].toBool(true));
     }
 
-    if (complexObject.contains(_jsonVehicleSpeedKey))
+    if (complexObject.contains(_jsonVehicleSpeedKey)) {
         _vehicleSpeedFact.setRawValue(complexObject[_jsonVehicleSpeedKey].toDouble());
-    if (complexObject.contains(_jsonActuatorIdKey))
-        _actuatorIdFact.setRawValue(complexObject[_jsonActuatorIdKey].toInt());
-    if (complexObject.contains(_jsonActuatorValOnKey))
-        _actuatorValOnFact.setRawValue(complexObject[_jsonActuatorValOnKey].toDouble());
-    if (complexObject.contains(_jsonActuatorValOffKey))
-        _actuatorValOffFact.setRawValue(complexObject[_jsonActuatorValOffKey].toDouble());
-
+    }
+    if (complexObject.contains(_jsonSprayEnabledKey)) {
+        _sprayEnabledFact.setRawValue(complexObject[_jsonSprayEnabledKey].toBool());
+    }
+    if (complexObject.contains(_jsonPumpActuatorIdKey)) {
+        _pumpActuatorIdFact.setRawValue(complexObject[_jsonPumpActuatorIdKey].toInt());
+    }
+    if (complexObject.contains(_jsonSpinnerActuatorIdKey)) {
+        _spinnerActuatorIdFact.setRawValue(complexObject[_jsonSpinnerActuatorIdKey].toInt());
+    }
+    if (complexObject.contains(_jsonPumpFixedValueKey)) {
+        _pumpFixedValueFact.setRawValue(complexObject[_jsonPumpFixedValueKey].toDouble());
+    }
+    if (complexObject.contains(_jsonPumpRateKey)) {
+        _pumpRateFact.setRawValue(complexObject[_jsonPumpRateKey].toDouble());
+    }
+    if (complexObject.contains(_jsonSpinnerPWMKey)) {
+        _spinnerPWMFact.setRawValue(complexObject[_jsonSpinnerPWMKey].toDouble());
+    }
+    if (complexObject.contains(_jsonMinPumpKey)) {
+        _minPumpFact.setRawValue(complexObject[_jsonMinPumpKey].toDouble());
+    }
+    if (complexObject.contains(_jsonMinSpeedKey)) {
+        _minSpeedFact.setRawValue(complexObject[_jsonMinSpeedKey].toDouble());
+    }
     _entryPoint = complexObject[_jsonEntryPointKey].toInt();
 
     _ignoreRecalc = false;
