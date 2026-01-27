@@ -59,7 +59,7 @@ TransectStyleComplexItemEditor {
                 color: QGroundControl.globalPalette.text; opacity: 0.5
                 Layout.topMargin: _margin; Layout.bottomMargin: _margin
             }
-            QGCLabel { text: qsTr("Sprayer Setup (PX4 Actuators)"); font.bold: true; Layout.columnSpan: 2 }
+            QGCLabel { text: qsTr("Sprayer Hardware Setup"); font.bold: true; Layout.columnSpan: 2 }
 
             QGCCheckBox {
                 text: qsTr("Enable Sprayer"); checked: missionItem.sprayEnabled.value
@@ -67,14 +67,14 @@ TransectStyleComplexItemEditor {
                 Layout.columnSpan: 2
             }
 
-            QGCLabel { text: qsTr("Pump Actuator ID (1-6)") }
+            QGCLabel { text: qsTr("Pump Output ID") }
             FactTextField {
                 fact: missionItem.pumpActuatorId
                 Layout.fillWidth: true
                 enabled: missionItem.sprayEnabled.value
             }
 
-            QGCLabel { text: qsTr("Spinner Actuator ID (1-6)") }
+            QGCLabel { text: qsTr("Spinner Output ID") }
             FactTextField {
                 fact: missionItem.spinnerActuatorId
                 Layout.fillWidth: true
@@ -100,21 +100,21 @@ TransectStyleComplexItemEditor {
                 enabled: missionItem.sprayEnabled.value
             }
 
-            QGCLabel { text: qsTr("Pump ON Value (-1 to 1)") }
+            QGCLabel { text: qsTr("Pump ON Value") }
             FactTextField {
                 fact: missionItem.pumpFixedValue
                 Layout.fillWidth: true
                 enabled: missionItem.sprayEnabled.value && !varRateCheck.checked
             }
 
-            QGCLabel { text: qsTr("Pump Rate (% per m/s)") }
+            QGCLabel { text: qsTr("Pump Rate") }
             FactTextField {
                 fact: missionItem.pumpRate
                 Layout.fillWidth: true
                 enabled: missionItem.sprayEnabled.value && varRateCheck.checked
             }
 
-            QGCLabel { text: qsTr("Min Pump Output (%)") }
+            QGCLabel { text: qsTr("Min Pump Output") }
             FactTextField {
                 fact: missionItem.minPump
                 Layout.fillWidth: true

@@ -100,76 +100,130 @@ void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject*
         return;
     }
 
-    MAV_AUTOPILOT firmwareType = _controllerVehicle ? _controllerVehicle->firmwareType() : MAV_AUTOPILOT_GENERIC;
-    MAV_CMD command;
+    double pumpValue = -1.0;
+    double spinnerValue = -1.0;
 
-    double params[7];
-    for(int i=0; i<7; i++) {
-        params[i] = qQNaN();
-    }
+    if (active) {
+        double rate = _pumpRateFact.rawValue().toDouble();
 
-    if (firmwareType == MAV_AUTOPILOT_ARDUPILOTMEGA) {
-        command = MAV_CMD_DO_SPRAYER;
-        double sprayerValue = active ? 1 : 0;
-        params[0] = sprayerValue;
-    } else  if (firmwareType == MAV_AUTOPILOT_PX4) {
-        command = MAV_CMD_DO_SET_ACTUATOR;
+        if (rate > 0.001) {
+            double speed = _vehicleSpeedFact.rawValue().toDouble();
+            double minSpeed = _minSpeedFact.rawValue().toDouble();
 
-        double pumpValue = -1.0;
-        double spinnerValue = -1.0;
+            if (speed >= minSpeed) {
+                double rateFactor = rate / 100.0;
 
-        if (active) {
-            double rate = _pumpRateFact.rawValue().toDouble();
+                double calculatedPower01 = speed * rateFactor;
 
-            if (rate > 0.001) {
-                double speed = _vehicleSpeedFact.rawValue().toDouble();
-                double minSpeed = _minSpeedFact.rawValue().toDouble();
+                double minPump01 = _minPumpFact.rawValue().toDouble() / 100.0;
 
-                if (speed >= minSpeed) {
-                    double rateFactor = rate / 100.0;
-
-                    double calculatedPower01 = speed * rateFactor;
-
-                    double minPump01 = _minPumpFact.rawValue().toDouble() / 100.0;
-
-                    if (calculatedPower01 < minPump01) {
-                        calculatedPower01 = minPump01;
-                    }
-                    if (calculatedPower01 > 1.0) {
-                        calculatedPower01 = 1.0;
-                    }
-
-                    pumpValue = (calculatedPower01 * 2.0) - 1.0;
-
-                } else {
-                    pumpValue = -1.0;
+                if (calculatedPower01 < minPump01) {
+                    calculatedPower01 = minPump01;
                 }
+                if (calculatedPower01 > 1.0) {
+                    calculatedPower01 = 1.0;
+                }
+
+                pumpValue = (calculatedPower01 * 2.0) - 1.0;
+
             } else {
-                pumpValue = _pumpFixedValueFact.rawValue().toDouble();
+                pumpValue = -1.0;
             }
-
-            spinnerValue = _spinnerPWMFact.rawValue().toDouble();
-
         } else {
-            pumpValue = -1.0;
-            spinnerValue = -1.0;
+            pumpValue = _pumpFixedValueFact.rawValue().toDouble();
         }
 
-        int pumpId = _pumpActuatorIdFact.rawValue().toInt();
-        int spinnerId = _spinnerActuatorIdFact.rawValue().toInt();
+        spinnerValue = _spinnerPWMFact.rawValue().toDouble();
 
-        if (pumpId >= 1 && pumpId <= 6) params[pumpId - 1] = pumpValue;
-        if (spinnerId >= 1 && spinnerId <= 6) params[spinnerId - 1] = spinnerValue;
+    } else {
+        pumpValue = -1.0;
+        spinnerValue = -1.0;
     }
 
-    MissionItem* item = new MissionItem(seqNum++,
-                                        command,
-                                        MAV_FRAME_MISSION,
-                                        params[0], params[1], params[2], params[3], params[4], params[5], params[6],
-                                        true,
-                                        false,
-                                        missionItemParent);
-    items.append(item);
+    MAV_AUTOPILOT firmwareType = _controllerVehicle ? _controllerVehicle->firmwareType() : MAV_AUTOPILOT_GENERIC;
+
+    int pumpId = _pumpActuatorIdFact.rawValue().toInt();
+    int spinnerId = _spinnerActuatorIdFact.rawValue().toInt();
+
+    // double params[7];
+    // for(int i=0; i<7; i++) {
+    //     params[i] = qQNaN();
+    // }
+    // if (firmwareType == MAV_AUTOPILOT_ARDUPILOTMEGA) {
+    //     command = MAV_CMD_DO_SPRAYER;
+    //     double sprayerValue = active ? 1 : 0;
+    //     params[0] = sprayerValue;
+
+    //     MissionItem* item = new MissionItem(seqNum++,
+    //                                         command,
+    //                                         MAV_FRAME_MISSION,
+    //                                         params[0], params[1], params[2], params[3], params[4], params[5], params[6],
+    //                                         true,
+    //                                         false,
+    //                                         missionItemParent);
+    //     items.append(item);
+
+    if (firmwareType == MAV_AUTOPILOT_ARDUPILOTMEGA) {
+        double pumpPWM = 1500.0 + (pumpValue * 500.0);
+        double spinnerPWM = 1500.0 + (spinnerValue * 500.0);
+
+        if (pumpPWM < 1000) {
+            pumpPWM = 1000;
+        };
+        if (pumpPWM > 2000) {
+            pumpPWM = 2000;
+        }
+        if (spinnerPWM < 1000) {
+            spinnerPWM = 1000;
+        }
+        if (spinnerPWM > 2000) {
+            spinnerPWM = 2000;
+        }
+
+        if (pumpId > 0) {
+            MissionItem* item = new MissionItem(seqNum++,
+                                                MAV_CMD_DO_SET_SERVO,
+                                                MAV_FRAME_MISSION,
+                                                (double)pumpId,
+                                                pumpPWM,
+                                                0, 0, 0, 0, 0,
+                                                true, false, missionItemParent);
+            items.append(item);
+        }
+
+        if (spinnerId > 0) {
+            MissionItem* item = new MissionItem(seqNum++,
+                                                MAV_CMD_DO_SET_SERVO,
+                                                MAV_FRAME_MISSION,
+                                                (double)spinnerId,
+                                                spinnerPWM,
+                                                0, 0, 0, 0, 0,
+                                                true, false, missionItemParent);
+            items.append(item);
+        }
+
+    } else if (firmwareType == MAV_AUTOPILOT_PX4){
+
+        MAV_CMD command = MAV_CMD_DO_SET_ACTUATOR;
+        double params[7];
+        for(int i=0; i<7; i++) params[i] = qQNaN();
+
+        if (pumpId >= 1 && pumpId <= 6) {
+            params[pumpId - 1] = pumpValue;
+        }
+        if (spinnerId >= 1 && spinnerId <= 6) {
+            params[spinnerId - 1] = spinnerValue;
+        }
+
+        MissionItem* item = new MissionItem(seqNum++,
+                                            command,
+                                            MAV_FRAME_MISSION,
+                                            params[0], params[1], params[2], params[3], params[4], params[5], 0,
+                                            true,
+                                            false,
+                                            missionItemParent);
+        items.append(item);
+    }
 }
 
 void AgroComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* missionItemParent)

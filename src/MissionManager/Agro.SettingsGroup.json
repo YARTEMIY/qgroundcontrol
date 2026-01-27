@@ -43,7 +43,7 @@
 },
 {
     "name":             "PumpActuatorId",
-    "shortDesc": "Pump Actuator Output ID (1-6).",
+    "shortDesc": "Pump Actuator/Servo ID (PX4: 1-6, Ardu: 1-6).",
     "type":             "int32",
     "min":              1,
     "max":              6,
@@ -51,7 +51,7 @@
 },
 {
     "name":             "SpinnerActuatorId",
-    "shortDesc": "Spinner Actuator Output ID (1-6).",
+    "shortDesc": "Spinner Actuator/Servo ID (PX4: 1-6, Ardu: 1-6).",
     "type":             "int32",
     "min":              0,
     "max":              6,
