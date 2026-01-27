@@ -104,15 +104,15 @@ void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject*
     MAV_CMD command;
 
     double params[7];
-    for(int i=0; i<7; i++) params[i] = qQNaN();
+    for(int i=0; i<7; i++) {
+        params[i] = qQNaN();
+    }
 
     if (firmwareType == MAV_AUTOPILOT_ARDUPILOTMEGA) {
-        command = MAV_CMD_DO_SET_SERVO;
-        int pumpId = _pumpActuatorIdFact.rawValue().toInt();
-        double pwmVal = active ? _pumpFixedValueFact.rawValue().toDouble() : 1000.0;
-        params[0] = (double)pumpId;
-        params[1] = pwmVal;
-    } else {
+        command = MAV_CMD_DO_SPRAYER;
+        double sprayerValue = active ? 1 : 0;
+        params[0] = sprayerValue;
+    } else  if (firmwareType == MAV_AUTOPILOT_PX4) {
         command = MAV_CMD_DO_SET_ACTUATOR;
 
         double pumpValue = -1.0;
@@ -165,7 +165,7 @@ void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject*
     MissionItem* item = new MissionItem(seqNum++,
                                         command,
                                         MAV_FRAME_MISSION,
-                                        params[0], params[1], params[2], params[3], params[4], params[5], 0,
+                                        params[0], params[1], params[2], params[3], params[4], params[5], params[6],
                                         true,
                                         false,
                                         missionItemParent);
