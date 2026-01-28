@@ -41,6 +41,10 @@ public:
     Q_PROPERTY(Fact*            spinnerPWM             READ spinnerPWM             CONSTANT)
     Q_PROPERTY(Fact*            minPump                READ minPump                CONSTANT)
     Q_PROPERTY(Fact*            minSpeed               READ minSpeed               CONSTANT)
+    Q_PROPERTY(Fact*            calcModeEnabled        READ calcModeEnabled        CONSTANT)
+    Q_PROPERTY(Fact*            targetRate             READ targetRate             CONSTANT)
+    Q_PROPERTY(Fact*            flowRateMax            READ flowRateMax            CONSTANT)
+    Q_PROPERTY(Fact*            swathWidth             READ swathWidth             CONSTANT)
 
     Fact* gridAngle             (void) { return &_gridAngleFact; }
     Fact* flyAlternateTransects (void) { return &_flyAlternateTransectsFact; }
@@ -54,6 +58,10 @@ public:
     Fact* spinnerPWM            (void) { return &_spinnerPWMFact; }
     Fact* minPump               (void) { return &_minPumpFact; }
     Fact* minSpeed              (void) { return &_minSpeedFact; }
+    Fact* calcModeEnabled       (void) { return &_calcModeEnabledFact; }
+    Fact* targetRate            (void) { return &_targetRateFact; }
+    Fact* flowRateMax           (void) { return &_flowRateMaxFact; }
+    Fact* swathWidth            (void) { return &_swathWidthFact; }
 
     Q_INVOKABLE void rotateEntryPoint(void);
 
@@ -111,6 +119,10 @@ public:
     static constexpr const char* spinnerPWMName =             "SpinnerPWM";
     static constexpr const char* minPumpName =                "MinPump";
     static constexpr const char* minSpeedName =               "MinSpeed";
+    static constexpr const char* calcModeEnabledName =        "CalcModeEnabled";
+    static constexpr const char* targetRateName =             "TargetRate";
+    static constexpr const char* flowRateMaxName =            "FlowRateMax";
+    static constexpr const char* swathWidthName =             "SwathWidth";
 
 signals:
     void refly90DegreesChanged(bool refly90Degrees);
@@ -121,6 +133,8 @@ private slots:
     // Overrides from TransectStyleComplexItem
     void _rebuildTransectsPhase1        (void) final;
     void _recalcCameraShots             (void) final;
+
+    void _recalcSpeedFromRate           (void);
 
 private:
     enum CameraTriggerCode {
@@ -187,6 +201,10 @@ private:
     SettingsFact    _spinnerPWMFact;
     SettingsFact    _minPumpFact;
     SettingsFact    _minSpeedFact;
+    SettingsFact    _calcModeEnabledFact;
+    SettingsFact    _targetRateFact;
+    SettingsFact    _flowRateMaxFact;
+    SettingsFact    _swathWidthFact;
     int             _entryPoint;
 
     static constexpr const char* _jsonGridAngleKey =          "angle";
@@ -228,4 +246,8 @@ private:
     static constexpr const char* _jsonSpinnerPWMKey =                     "spinnerPWM";
     static constexpr const char* _jsonMinPumpKey =                        "minPump";
     static constexpr const char* _jsonMinSpeedKey =                       "minSpeed";
+    static constexpr const char* _jsonCalcModeEnabledKey =                "calcModeEnabled";
+    static constexpr const char* _jsonTargetRateKey =                     "targetRate";
+    static constexpr const char* _jsonFlowRateMaxKey =                    "flowRateMax";
+    static constexpr const char* _jsonSwathWidthKey =                     "swathWidth";
 };

@@ -47,11 +47,68 @@ TransectStyleComplexItemEditor {
                 live: true
             }
 
-            QGCLabel { text: qsTr("Flight Speed") }
+            Rectangle {
+                Layout.columnSpan: 2; Layout.fillWidth: true; height: 1
+                color: QGroundControl.globalPalette.text; opacity: 0.5
+                Layout.topMargin: _margin; Layout.bottomMargin: _margin
+            }
+            QGCLabel { text: qsTr("Application Rate Control"); font.bold: true; Layout.columnSpan: 2 }
+
+            FactCheckBox {
+                id: calcModeCheck
+                text: qsTr("Auto-Calculate Speed by Rate")
+                fact: missionItem.calcModeEnabled
+                Layout.columnSpan: 2
+            }
+
+            QGCLabel {
+                text: qsTr("Target Rate (L/ha)")
+                visible: calcModeCheck.checked
+            }
+            FactTextField {
+                fact: missionItem.targetRate
+                Layout.fillWidth: true
+                visible: calcModeCheck.checked
+            }
+            QGCSlider {
+                from:           1
+                to:             100
+                stepSize:       1
+                value:          missionItem.targetRate.value
+                onValueChanged: missionItem.targetRate.value = value
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                visible:        calcModeCheck.checked
+                live:           true
+            }
+
+            QGCLabel {
+                text: qsTr("Swath Width (m)")
+                visible: calcModeCheck.checked
+            }
+            FactTextField {
+                fact: missionItem.swathWidth
+                Layout.fillWidth: true
+                visible: calcModeCheck.checked
+            }
+
+            QGCLabel {
+                text: qsTr("Max Flow (L/min)")
+                visible: calcModeCheck.checked
+            }
+            FactTextField {
+                fact: missionItem.flowRateMax
+                Layout.fillWidth: true
+                visible: calcModeCheck.checked
+            }
+
+            QGCLabel { text: qsTr("Calculated Flight Speed") }
             FactTextField {
                 fact:               missionItem.vehicleSpeed
                 Layout.fillWidth:   true
                 unitsLabel:         "m/s"
+                enabled:            !calcModeCheck.checked
+                readOnly:           calcModeCheck.checked
             }
 
             Rectangle {
@@ -59,80 +116,42 @@ TransectStyleComplexItemEditor {
                 color: QGroundControl.globalPalette.text; opacity: 0.5
                 Layout.topMargin: _margin; Layout.bottomMargin: _margin
             }
-            QGCLabel { text: qsTr("Sprayer Hardware Setup"); font.bold: true; Layout.columnSpan: 2 }
 
             QGCCheckBox {
-                text: qsTr("Enable Sprayer"); checked: missionItem.sprayEnabled.value
-                onClicked: missionItem.sprayEnabled.value = checked
+                id: showAdvanced
+                text: qsTr("Show Advanced / Hardware Setup")
+                checked: false
                 Layout.columnSpan: 2
             }
 
-            QGCLabel { text: qsTr("Pump Output ID") }
-            FactTextField {
-                fact: missionItem.pumpActuatorId
+            ColumnLayout {
+                Layout.columnSpan: 2
                 Layout.fillWidth: true
-                enabled: missionItem.sprayEnabled.value
-            }
+                visible: showAdvanced.checked
 
-            QGCLabel { text: qsTr("Spinner Output ID") }
-            FactTextField {
-                fact: missionItem.spinnerActuatorId
-                Layout.fillWidth: true
-                enabled: missionItem.sprayEnabled.value
-            }
+                FactCheckBox { text: qsTr("Enable Sprayer"); fact: missionItem.sprayEnabled }
 
-            QGCLabel {
-                text: qsTr("Pump Logic Mode"); font.bold: true; Layout.columnSpan: 2; Layout.topMargin: _margin
-            }
+                GridLayout {
+                    columns: 2
+                    Layout.fillWidth: true
 
-            QGCCheckBox {
-                id: varRateCheck
-                text: qsTr("Use Speed Dependent Rate")
-                checked: missionItem.pumpRate.value > 0.001
-                onClicked: {
-                    if (checked) {
-                        missionItem.pumpRate.value = 0.2
-                    } else {
-                        missionItem.pumpRate.value = 0.0
-                    }
+                    QGCLabel { text: qsTr("Pump ID") }
+                    FactTextField { fact: missionItem.pumpActuatorId; Layout.fillWidth: true }
+
+                    QGCLabel { text: qsTr("Spinner ID") }
+                    FactTextField { fact: missionItem.spinnerActuatorId; Layout.fillWidth: true }
+
+                    QGCLabel { text: "Manual Logic:"; font.bold: true; Layout.columnSpan: 2; visible: !calcModeCheck.checked }
+
+                    QGCLabel { text: qsTr("Pump Fixed Val"); visible: !calcModeCheck.checked }
+                    FactTextField { fact: missionItem.pumpFixedValue; Layout.fillWidth: true; visible: !calcModeCheck.checked }
+
+                    QGCLabel { text: qsTr("Pump Rate %"); visible: !calcModeCheck.checked }
+                    FactTextField { fact: missionItem.pumpRate; Layout.fillWidth: true; visible: !calcModeCheck.checked }
+
+                    QGCLabel { text: qsTr("Spinner Speed"); visible: !calcModeCheck.checked }
+                    FactTextField { fact: missionItem.spinnerPWM; Layout.fillWidth: true; visible: !calcModeCheck.checked }
                 }
-                Layout.columnSpan: 2
-                enabled: missionItem.sprayEnabled.value
-            }
-
-            QGCLabel { text: qsTr("Pump ON Value") }
-            FactTextField {
-                fact: missionItem.pumpFixedValue
-                Layout.fillWidth: true
-                enabled: missionItem.sprayEnabled.value && !varRateCheck.checked
-            }
-
-            QGCLabel { text: qsTr("Pump Rate") }
-            FactTextField {
-                fact: missionItem.pumpRate
-                Layout.fillWidth: true
-                enabled: missionItem.sprayEnabled.value && varRateCheck.checked
-            }
-
-            QGCLabel { text: qsTr("Min Pump Output") }
-            FactTextField {
-                fact: missionItem.minPump
-                Layout.fillWidth: true
-                enabled: missionItem.sprayEnabled.value && varRateCheck.checked
-            }
-
-            QGCLabel { text: qsTr("Min Speed (m/s)") }
-            FactTextField {
-                fact: missionItem.minSpeed
-                Layout.fillWidth: true
-                enabled: missionItem.sprayEnabled.value && varRateCheck.checked
-            }
-
-            QGCLabel { text: qsTr("Spinner Speed") }
-            FactTextField {
-                fact: missionItem.spinnerPWM
-                Layout.fillWidth: true
-                enabled: missionItem.sprayEnabled.value
             }
 
             Rectangle {

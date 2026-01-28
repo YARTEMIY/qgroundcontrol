@@ -36,6 +36,38 @@
     "default":          5.0
 },
 {
+    "name":             "CalcModeEnabled",
+    "shortDesc": "Enable Auto-Calculation by L/ha.",
+    "type":             "bool",
+    "default":          true
+},
+{
+    "name":             "TargetRate",
+    "shortDesc": "Target Application Rate (R).",
+    "type":             "double",
+    "units":            "L/ha",
+    "min":              1.0,
+    "max":              10.0,
+    "decimalPlaces":    1,
+    "default":          2.0
+},
+{
+    "name":             "FlowRateMax",
+    "shortDesc": "Max Pump Flow Rate (q) from Sensor.",
+    "type":             "double",
+    "units":            "L/min",
+    "decimalPlaces":    2,
+    "default":          3.0
+},
+{
+    "name":             "SwathWidth",
+    "shortDesc": "Swath Width (s) from Sensor.",
+    "type":             "double",
+    "units":            "m",
+    "decimalPlaces":    2,
+    "default":          5.0
+},
+{
     "name":             "SprayEnabled",
     "shortDesc": "Enable Sprayer generation.",
     "type":             "bool",
