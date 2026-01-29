@@ -15,7 +15,7 @@
 #include <QtCore/QLoggingCategory>
 
 #include "clipper.hpp"
-
+#include <vector>
 
 Q_DECLARE_LOGGING_CATEGORY(SurveyComplexItemLog)
 
@@ -30,7 +30,6 @@ public:
     /// @param flyView true: Created for use in the Fly View, false: Created for use in the Plan View
     /// @param kmlOrShpFile Polygon comes from this file, empty for default polygon
     AgroComplexItem(PlanMasterController* masterController, bool flyView, const QString& kmlOrShpFile);
-    Q_PROPERTY(Fact* isExclusionZone READ isExclusionZone CONSTANT)
     Q_PROPERTY(Fact*            gridAngle              READ gridAngle              CONSTANT)
     Q_PROPERTY(Fact*            flyAlternateTransects  READ flyAlternateTransects  CONSTANT)
     Q_PROPERTY(Fact*            splitConcavePolygons   READ splitConcavePolygons   CONSTANT)
@@ -109,13 +108,17 @@ private:
         CameraTriggerHoverAndCapture
     };
 
+    struct VisibilityNode_t {
+        QPointF pt;
+        std::vector<int> neighbors;
+    };
+
     QPointF        _rotatePoint(const QPointF& point, const QPointF& origin, double angle);
     void _intersectLinesWithRect(const QList<QLineF>& lineList, const QRectF& boundRect, QList<QLineF>& resultLines);
     void _intersectLinesWithPolygon(const QList<QLineF>& lineList, const QList<QPolygonF>& allowedPolygons, QList<QLineF>& resultLines);
     QList<QLineF> _subtractPolygonFromLine(const QLineF& line, const QPolygonF& polygon);
     void _adjustLineDirection(const QList<QLineF>& lineList, QList<QLineF>& resultLines);
     bool _nextTransectCoord(const QList<QGeoCoordinate>& transectPoints, int pointIndex, QGeoCoordinate& coord);
-    bool _appendMissionItemsWorker(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool hasRefly, bool buildRefly);
     void _optimizeTransectsForShortestDistance(const QGeoCoordinate& distanceCoord, QList<QList<QGeoCoordinate>>& transects);
     qreal _ccw(QPointF pt1, QPointF pt2, QPointF pt3);
     qreal _dp(QPointF pt1, QPointF pt2);
@@ -124,8 +127,7 @@ private:
     void _reverseInternalTransectPoints(QList<QList<QGeoCoordinate>>& transects);
     void _adjustTransectsToEntryPointLocation(QList<QList<QGeoCoordinate>>& transects);
     bool _gridAngleIsNorthSouthTransects();
-    double         _clampGridAngle90(double gridAngle);
-    bool _imagesEverywhere(void) const;
+    double _clampGridAngle90(double gridAngle);
     bool _triggerCamera(void) const;
     bool _hasTurnaround(void) const;
     double _turnaroundDistance(void) const;
@@ -144,26 +146,17 @@ private:
     bool _isPolygonCircle(const QPolygonF& polygon, QPointF& center);
 
     QList<QPolygonF> _splitPolygonHorizontal(const QPolygonF& polygon, double splitY);
-    void _appendBypassIfNecessary(const QGeoCoordinate& start, const QGeoCoordinate& end, const QGeoCoordinate& tangentOrigin, const QList<QPolygonF>& exclusionPolygons);
+    bool _appendBypassIfNecessary(const QGeoCoordinate& start, const QGeoCoordinate& end, const QGeoCoordinate& tangentOrigin, const QList<QPolygonF>& allowedPolygons, const QList<QPolygonF>& inflatedExclusionPolysNED);
     void _inflateExclusionZones(const QList<QPolygonF>& exclusionPolygonsNED, double marginMeters, QList<QPolygonF>& inflatedPolygonsNED);
-    QPointF        _getAndOrderFirstPoint(const QList<QLineF>& segments, const QRectF& boundingRect);
 
-
-    void _generateTransectsForAllowedPolygons(bool refly,
-                                          const QList<QPolygonF>& allowedPolygons,
-                                          const QGeoCoordinate& tangentOrigin,
-                                          const QList<QPolygonF>& exclusionPolygons);
-
-
-
-    bool _isPathClear(const QPointF& start, const QPointF& end, const QList<QPolygonF>& exclusionPolygons);
-
+    bool _isPathClear(const QPointF &start, const QPointF &end, const QList<QPolygonF> &checkExclusionPolys);
 
     ClipperLib::Path _toClipperPath(const QPolygonF& poly) const;
     QPolygonF        _fromClipperPath(const ClipperLib::Path& path) const;
 
-    static constexpr double _clipperScale = 1000.0;
+    static constexpr double _clipperScale = 10000.0;
     QGeoCoordinate _toGeo(const QPointF& pt, const QGeoCoordinate& origin);
+    QList<QPointF> _findSafePath(const QPointF& start, const QPointF& end, const QList<QPolygonF>& allowedPolygons, const QList<QPolygonF>& checkExclusionPolys);
 #if 0
     // Splitting polygons is not supported since this code would get stuck in a infinite loop
     // Code is left here in case someone wants to try to resurrect it
