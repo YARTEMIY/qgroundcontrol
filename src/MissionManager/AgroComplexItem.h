@@ -14,6 +14,9 @@
 
 #include <QtCore/QLoggingCategory>
 
+#include "clipper.hpp"
+#include <vector>
+
 Q_DECLARE_LOGGING_CATEGORY(SurveyComplexItemLog)
 
 class PlanMasterController;
@@ -27,10 +30,10 @@ public:
     /// @param flyView true: Created for use in the Fly View, false: Created for use in the Plan View
     /// @param kmlOrShpFile Polygon comes from this file, empty for default polygon
     AgroComplexItem(PlanMasterController* masterController, bool flyView, const QString& kmlOrShpFile);
-
     Q_PROPERTY(Fact*            gridAngle              READ gridAngle              CONSTANT)
     Q_PROPERTY(Fact*            flyAlternateTransects  READ flyAlternateTransects  CONSTANT)
     Q_PROPERTY(Fact*            splitConcavePolygons   READ splitConcavePolygons   CONSTANT)
+    Q_PROPERTY(Fact*            isExclusionZone        READ isExclusionZone        CONSTANT)
     Q_PROPERTY(QGeoCoordinate   centerCoordinate       READ centerCoordinate       WRITE setCenterCoordinate)
     Q_PROPERTY(Fact*            vehicleSpeed           READ vehicleSpeed           CONSTANT)
     Q_PROPERTY(Fact*            sprayEnabled           READ sprayEnabled           CONSTANT)
@@ -48,6 +51,7 @@ public:
 
     Fact* gridAngle             (void) { return &_gridAngleFact; }
     Fact* flyAlternateTransects (void) { return &_flyAlternateTransectsFact; }
+    Fact* isExclusionZone       (void) { return &_isExclusionZoneFact; }
     Fact* splitConcavePolygons  (void) { return &_splitConcavePolygonsFact; }
     Fact* vehicleSpeed          (void) { return &_vehicleSpeedFact; }
     Fact* sprayEnabled          (void) { return &_sprayEnabledFact; }
@@ -68,7 +72,7 @@ public:
     // Overrides from ComplexMissionItem
     QString         patternName         (void) const final { return name; }
     bool            load                (const QJsonObject& complexObject, int sequenceNumber, QString& errorString) final;
-    QString         mapVisualQML        (void) const final { return QStringLiteral("SurveyMapVisual.qml"); }
+    QString         mapVisualQML        (void) const final { return QStringLiteral("AgroMapVisual.qml"); }
     QString         presetsSettingsGroup(void) { return settingsGroup; }
     void            savePreset          (const QString& name);
     void            loadPreset          (const QString& name);
@@ -78,7 +82,7 @@ public:
 
     // Overrides from TransectStyleComplexItem
     void    save                (QJsonArray&  planItems) final;
-    bool    specifiesCoordinate (void) const final { return true; }
+    bool    specifiesCoordinate (void) const final { return !_isExclusionZoneFact.rawValue().toBool(); }
     double  timeBetweenShots    (void) final;
     void    appendMissionItems  (QList<MissionItem*>& items, QObject* missionItemParent);
     void    _appendVisualAction(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, MAV_FRAME frame, const QGeoCoordinate& coord);
@@ -102,6 +106,7 @@ public:
 
     static const QString name;
 
+    static constexpr const char* isExclusionZoneName =        "IsExclusionZone";
     static constexpr const char* jsonComplexItemTypeValue =   "agro";
     static constexpr const char* jsonV3ComplexItemTypeValue = "agro";
 
@@ -144,12 +149,17 @@ private:
         CameraTriggerHoverAndCapture
     };
 
-    QPointF _rotatePoint(const QPointF& point, const QPointF& origin, double angle);
+    struct VisibilityNode_t {
+        QPointF pt;
+        std::vector<int> neighbors;
+    };
+
+    QPointF        _rotatePoint(const QPointF& point, const QPointF& origin, double angle);
     void _intersectLinesWithRect(const QList<QLineF>& lineList, const QRectF& boundRect, QList<QLineF>& resultLines);
-    void _intersectLinesWithPolygon(const QList<QLineF>& lineList, const QPolygonF& polygon, QList<QLineF>& resultLines);
+    void _intersectLinesWithPolygon(const QList<QLineF>& lineList, const QList<QPolygonF>& allowedPolygons, QList<QLineF>& resultLines);
+    QList<QLineF> _subtractPolygonFromLine(const QLineF& line, const QPolygonF& polygon);
     void _adjustLineDirection(const QList<QLineF>& lineList, QList<QLineF>& resultLines);
     bool _nextTransectCoord(const QList<QGeoCoordinate>& transectPoints, int pointIndex, QGeoCoordinate& coord);
-    bool _appendMissionItemsWorker(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool hasRefly, bool buildRefly);
     void _optimizeTransectsForShortestDistance(const QGeoCoordinate& distanceCoord, QList<QList<QGeoCoordinate>>& transects);
     qreal _ccw(QPointF pt1, QPointF pt2, QPointF pt3);
     qreal _dp(QPointF pt1, QPointF pt2);
@@ -159,7 +169,6 @@ private:
     void _adjustTransectsToEntryPointLocation(QList<QList<QGeoCoordinate>>& transects);
     bool _gridAngleIsNorthSouthTransects();
     double _clampGridAngle90(double gridAngle);
-    bool _imagesEverywhere(void) const;
     bool _triggerCamera(void) const;
     bool _hasTurnaround(void) const;
     double _turnaroundDistance(void) const;
@@ -173,7 +182,22 @@ private:
     void _rebuildTransectsFromPolygon(bool refly, const QPolygonF& polygon, const QGeoCoordinate& tangentOrigin, const QPointF* const transitionPoint);
 
     void _appendSprayerCommand(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool active);
+    static bool _ignoreGlobalUpdate;
+    void _updateOtherAgroItems();
+    bool _isPolygonCircle(const QPolygonF& polygon, QPointF& center);
 
+    QList<QPolygonF> _splitPolygonHorizontal(const QPolygonF& polygon, double splitY);
+    bool _appendBypassIfNecessary(const QGeoCoordinate& start, const QGeoCoordinate& end, const QGeoCoordinate& tangentOrigin, const QList<QPolygonF>& allowedPolygons, const QList<QPolygonF>& inflatedExclusionPolysNED);
+    void _inflateExclusionZones(const QList<QPolygonF>& exclusionPolygonsNED, double marginMeters, QList<QPolygonF>& inflatedPolygonsNED);
+
+    bool _isPathClear(const QPointF &start, const QPointF &end, const QList<QPolygonF> &checkExclusionPolys);
+
+    ClipperLib::Path _toClipperPath(const QPolygonF& poly) const;
+    QPolygonF        _fromClipperPath(const ClipperLib::Path& path) const;
+
+    static constexpr double _clipperScale = 10000.0;
+    QGeoCoordinate _toGeo(const QPointF& pt, const QGeoCoordinate& origin);
+    QList<QPointF> _findSafePath(const QPointF& start, const QPointF& end, const QList<QPolygonF>& allowedPolygons, const QList<QPolygonF>& checkExclusionPolys);
 #if 0
     // Splitting polygons is not supported since this code would get stuck in a infinite loop
     // Code is left here in case someone wants to try to resurrect it
@@ -181,7 +205,6 @@ private:
     void _rebuildTransectsPhase1WorkerSplitPolygons(bool refly);
 
     // Decompose polygon into list of convex sub polygons
-    void _PolygonDecomposeConvex(const QPolygonF& polygon, QList<QPolygonF>& decomposedPolygons);
     // return true if vertex a can see vertex b
     bool _VertexCanSeeOther(const QPolygonF& polygon, const QPointF* vertexA, const QPointF* vertexB);
     bool _VertexIsReflex(const QPolygonF& polygon, QList<QPointF>::const_iterator& vertexIter);
@@ -205,10 +228,12 @@ private:
     SettingsFact    _targetRateFact;
     SettingsFact    _flowRateMaxFact;
     SettingsFact    _swathWidthFact;
+    SettingsFact    _isExclusionZoneFact;
     int             _entryPoint;
 
     static constexpr const char* _jsonGridAngleKey =          "angle";
     static constexpr const char* _jsonEntryPointKey =         "entryLocation";
+    static constexpr const char* _jsonIsExclusionZoneKey =    "isExclusionZone";
 
     static constexpr const char* _jsonV3GridObjectKey =                   "grid";
     static constexpr const char* _jsonV3GridAltitudeKey =                 "altitude";

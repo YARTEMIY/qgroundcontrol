@@ -41,6 +41,9 @@ Item {
     property var    _entryCoordinate
     property var    _exitCoordinate
 
+    // polymorphism: A color property that can be overridden in a descendant
+    property color  polygonColor:               QGroundControl.globalPalette.surveyPolygonInterior
+
     signal clicked(int sequenceNumber)
 
     function _addVisualElements() {
@@ -73,7 +76,8 @@ Item {
         interactive:        polygonInteractive && _missionItem.isCurrentItem && _root.interactive
         borderWidth:        1
         borderColor:        "black"
-        interiorColor:      QGroundControl.globalPalette.surveyPolygonInterior
+        // for polymorphism
+        interiorColor:      _root.polygonColor
         altColor:           QGroundControl.globalPalette.surveyPolygonTerrainCollision
         interiorOpacity:    0.5 * _root.opacity
     }

@@ -21,4 +21,13 @@ import QGroundControl.FlightMap
 /// Survey Complex Mission Item visuals
 TransectStyleMapVisuals {
     polygonInteractive: true
+
+    // redefining color
+    polygonColor: {
+        // Checking whether the object has the isExclusionZone property and whether it is enabled
+        if (_missionItem && _missionItem.isExclusionZone && _missionItem.isExclusionZone.value === true) {
+            return "red"   // Or "#FF4444" for a softer red
+        }
+        return "#228B22"   // ForestGreen (или просто "green")
+    }
 }

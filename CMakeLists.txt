@@ -276,6 +276,14 @@ qt_add_qml_module(${CMAKE_PROJECT_NAME}
         QtQuick.Layouts
 )
 
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE
+    src/Clipper/cpp/clipper.cpp
+)
+
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
+    src/Clipper/cpp
+)
+
 # ----------------------------------------------------------------------------
 # Source & Test Subdirectories
 # ----------------------------------------------------------------------------
