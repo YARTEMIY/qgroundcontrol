@@ -161,6 +161,7 @@ find_package(Qt6
         Core
         Core5Compat
         Gui
+        HttpServer
         LinguistTools
         Location
         LocationPrivate
@@ -336,10 +337,9 @@ qt_import_plugins(${CMAKE_PROJECT_NAME}
 if(LINUX)
     qt_import_plugins(${CMAKE_PROJECT_NAME}
         INCLUDE
-            Qt6::QWaylandIntegrationPlugin      # Wayland support
+            Qt6::QWaylandIntegrationPlugin      # Wayland support (libqwayland.so)
             Qt6::QXcbIntegrationPlugin          # X11 support
             Qt6::QEglFSIntegrationPlugin        # Embedded GL support
-            Qt6::QWaylandEglPlatformIntegrationPlugin
     )
 endif()
 

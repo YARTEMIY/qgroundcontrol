@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "PlanMasterController.h"
 #include "QGCApplication.h"
 #include "QGCCorePlugin.h"
@@ -25,8 +16,12 @@
 #include "QmlObjectListModel.h"
 #include "GeoFenceManager.h"
 #include "RallyPointManager.h"
+#include "QGCCompression.h"
+#include "QGCCompressionJob.h"
 #include "QGCLoggingCategory.h"
 
+#include <QtCore/QDir>
+#include <QtCore/QDirIterator>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QFileInfo>
 
@@ -348,13 +343,7 @@ void PlanMasterController::loadFromFile(const QString& filename)
     }
 
     bool success = false;
-    if (fileInfo.suffix() == AppSettings::missionFileExtension) {
-        if (!_missionController.loadJsonFile(file, errorString)) {
-            qgcApp()->showAppMessage(errorMessage.arg(errorString));
-        } else {
-            success = true;
-        }
-    } else if (fileInfo.suffix() == AppSettings::waypointsFileExtension || fileInfo.suffix() == QStringLiteral("txt")) {
+    if (fileInfo.suffix() == AppSettings::waypointsFileExtension || fileInfo.suffix() == QStringLiteral("txt")) {
         if (!_missionController.loadTextFile(file, errorString)) {
             qgcApp()->showAppMessage(errorMessage.arg(errorString));
         } else {
@@ -561,7 +550,7 @@ QStringList PlanMasterController::loadNameFilters(void) const
 {
     QStringList filters;
 
-    filters << tr("Supported types (*.%1 *.%2 *.%3 *.%4)").arg(AppSettings::planFileExtension).arg(AppSettings::missionFileExtension).arg(AppSettings::waypointsFileExtension).arg("txt") <<
+    filters << tr("Supported types (*.%1 *.%2 *.%3)").arg(AppSettings::planFileExtension).arg(AppSettings::waypointsFileExtension).arg("txt") <<
                tr("All Files (*)");
     return filters;
 }
@@ -664,4 +653,68 @@ void PlanMasterController::setManualCreation(bool manualCreation)
         _manualCreation = manualCreation;
         emit manualCreationChanged();
     }
+}
+
+void PlanMasterController::loadFromArchive(const QString& archivePath)
+{
+    if (archivePath.isEmpty()) {
+        return;
+    }
+
+    if (!QFile::exists(archivePath)) {
+        qgcApp()->showAppMessage(tr("Archive file not found: %1").arg(archivePath));
+        return;
+    }
+
+    if (!QGCCompression::isArchiveFile(archivePath)) {
+        qgcApp()->showAppMessage(tr("Not a supported archive format: %1").arg(archivePath));
+        return;
+    }
+
+    const QString tempPath = QDir::temp().filePath(QStringLiteral("qgc_plan_") + QString::number(QDateTime::currentMSecsSinceEpoch()));
+    if (!QDir().mkpath(tempPath)) {
+        qgcApp()->showAppMessage(tr("Could not create temporary directory"));
+        return;
+    }
+
+    _extractionOutputDir = tempPath;
+
+    if (_extractionJob == nullptr) {
+        _extractionJob = new QGCCompressionJob(this);
+        connect(_extractionJob, &QGCCompressionJob::finished,
+                this, &PlanMasterController::_handleExtractionFinished);
+    }
+
+    _extractionJob->extractArchive(archivePath, tempPath);
+}
+
+void PlanMasterController::_handleExtractionFinished(bool success)
+{
+    if (!success) {
+        const QString error = _extractionJob != nullptr ? _extractionJob->errorString() : tr("Extraction failed");
+        qgcApp()->showAppMessage(tr("Failed to extract plan archive: %1").arg(error));
+        QDir(_extractionOutputDir).removeRecursively();
+        _extractionOutputDir.clear();
+        return;
+    }
+
+    QString planPath;
+    const QString planExt = QStringLiteral("*.") + AppSettings::planFileExtension;
+    QDirIterator it(_extractionOutputDir, {planExt}, QDir::Files, QDirIterator::Subdirectories);
+    if (it.hasNext()) {
+        planPath = it.next();
+    }
+
+    if (planPath.isEmpty()) {
+        qgcApp()->showAppMessage(tr("No plan file found in archive"));
+        QDir(_extractionOutputDir).removeRecursively();
+        _extractionOutputDir.clear();
+        return;
+    }
+
+    qCDebug(PlanMasterControllerLog) << "Found plan file in archive:" << planPath;
+    loadFromFile(planPath);
+
+    QDir(_extractionOutputDir).removeRecursively();
+    _extractionOutputDir.clear();
 }

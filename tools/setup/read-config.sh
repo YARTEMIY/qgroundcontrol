@@ -12,12 +12,26 @@
 #
 # Exports:
 #   QT_VERSION, QT_MINIMUM_VERSION, QT_MODULES,
-#   GSTREAMER_VERSION, GSTREAMER_ANDROID_VERSION, GSTREAMER_WINDOWS_VERSION,
-#   XCODE_VERSION, NDK_VERSION, NDK_FULL_VERSION, JAVA_VERSION,
+#   GSTREAMER_MINIMUM_VERSION, GSTREAMER_MACOS_VERSION, GSTREAMER_ANDROID_VERSION,
+#   XCODE_VERSION, XCODE_IOS_VERSION, NDK_VERSION, NDK_FULL_VERSION, JAVA_VERSION,
 #   ANDROID_PLATFORM, ANDROID_MIN_SDK, ANDROID_BUILD_TOOLS, ANDROID_CMDLINE_TOOLS,
-#   CCACHE_VERSION, CCACHE_MAX_SIZE, CLANG_FORMAT_VERSION, NODE_VERSION
+#   CMAKE_MINIMUM_VERSION
 
 set -euo pipefail
+
+# Resolve the physical path to this script for both bash and zsh shells
+_script_source_path() {
+    if [[ -n "${BASH_VERSION:-}" ]]; then
+        printf '%s\n' "${BASH_SOURCE[0]}"
+    elif [[ -n "${ZSH_VERSION:-}" ]]; then
+        eval 'printf "%s\\n" "${(%):-%x}"'
+    else
+        printf '%s\n' "$0"
+    fi
+}
+
+SCRIPT_SOURCE="$(_script_source_path)"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
 
 # Find the repo root (location of .github/build-config.json)
 find_repo_root() {
@@ -37,7 +51,6 @@ find_repo_root() {
 get_config_value() {
     local key="$1"
     local config_file="$2"
-
     if command -v jq &> /dev/null; then
         jq -r ".$key // empty" "$config_file"
     elif command -v python3 &> /dev/null; then
@@ -47,9 +60,6 @@ get_config_value() {
         exit 1
     fi
 }
-
-# Main logic
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Check for config file in multiple locations:
 # 1. Same directory as this script (for Docker builds where config is copied)
@@ -70,11 +80,11 @@ if [[ "${1:-}" == "--get" ]]; then
         echo "" >&2
         echo "Available keys:" >&2
         echo "  qt_version, qt_modules, qt_minimum_version," >&2
-        echo "  gstreamer_version, gstreamer_android_version, gstreamer_windows_version," >&2
+        echo "  gstreamer_minimum_version, gstreamer_macos_version," >&2
+        echo "  gstreamer_android_version, gstreamer_windows_version," >&2
         echo "  ndk_version, ndk_full_version, java_version," >&2
         echo "  android_platform, android_min_sdk, android_build_tools, android_cmdline_tools," >&2
-        echo "  xcode_version, xcode_ios_version, ccache_version, ccache_max_size," >&2
-        echo "  clang_format_version, node_version, flatpak_gnome_version" >&2
+        echo "  xcode_version, xcode_ios_version, cmake_minimum_version" >&2
         exit 1
     fi
     get_config_value "$2" "$CONFIG_FILE"
@@ -85,10 +95,11 @@ fi
 export QT_VERSION="${QT_VERSION:-$(get_config_value qt_version "$CONFIG_FILE")}"
 export QT_MINIMUM_VERSION="${QT_MINIMUM_VERSION:-$(get_config_value qt_minimum_version "$CONFIG_FILE")}"
 export QT_MODULES="${QT_MODULES:-$(get_config_value qt_modules "$CONFIG_FILE")}"
-export GSTREAMER_VERSION="${GSTREAMER_VERSION:-$(get_config_value gstreamer_version "$CONFIG_FILE")}"
+export GSTREAMER_MINIMUM_VERSION="${GSTREAMER_MINIMUM_VERSION:-$(get_config_value gstreamer_minimum_version "$CONFIG_FILE")}"
+export GSTREAMER_MACOS_VERSION="${GSTREAMER_MACOS_VERSION:-$(get_config_value gstreamer_macos_version "$CONFIG_FILE")}"
 export GSTREAMER_ANDROID_VERSION="${GSTREAMER_ANDROID_VERSION:-$(get_config_value gstreamer_android_version "$CONFIG_FILE")}"
-export GSTREAMER_WINDOWS_VERSION="${GSTREAMER_WINDOWS_VERSION:-$(get_config_value gstreamer_windows_version "$CONFIG_FILE")}"
 export XCODE_VERSION="${XCODE_VERSION:-$(get_config_value xcode_version "$CONFIG_FILE")}"
+export XCODE_IOS_VERSION="${XCODE_IOS_VERSION:-$(get_config_value xcode_ios_version "$CONFIG_FILE")}"
 export NDK_VERSION="${NDK_VERSION:-$(get_config_value ndk_version "$CONFIG_FILE")}"
 export NDK_FULL_VERSION="${NDK_FULL_VERSION:-$(get_config_value ndk_full_version "$CONFIG_FILE")}"
 export JAVA_VERSION="${JAVA_VERSION:-$(get_config_value java_version "$CONFIG_FILE")}"
@@ -96,21 +107,19 @@ export ANDROID_PLATFORM="${ANDROID_PLATFORM:-$(get_config_value android_platform
 export ANDROID_MIN_SDK="${ANDROID_MIN_SDK:-$(get_config_value android_min_sdk "$CONFIG_FILE")}"
 export ANDROID_BUILD_TOOLS="${ANDROID_BUILD_TOOLS:-$(get_config_value android_build_tools "$CONFIG_FILE")}"
 export ANDROID_CMDLINE_TOOLS="${ANDROID_CMDLINE_TOOLS:-$(get_config_value android_cmdline_tools "$CONFIG_FILE")}"
-export CCACHE_VERSION="${CCACHE_VERSION:-$(get_config_value ccache_version "$CONFIG_FILE")}"
-export CCACHE_MAX_SIZE="${CCACHE_MAX_SIZE:-$(get_config_value ccache_max_size "$CONFIG_FILE")}"
-export CLANG_FORMAT_VERSION="${CLANG_FORMAT_VERSION:-$(get_config_value clang_format_version "$CONFIG_FILE")}"
-export NODE_VERSION="${NODE_VERSION:-$(get_config_value node_version "$CONFIG_FILE")}"
+export CMAKE_MINIMUM_VERSION="${CMAKE_MINIMUM_VERSION:-$(get_config_value cmake_minimum_version "$CONFIG_FILE")}"
 
 # Print config if running directly (not sourced)
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+if [[ "$SCRIPT_SOURCE" == "$0" ]]; then
     echo "Build Configuration (from $CONFIG_FILE):"
     echo "  QT_VERSION=$QT_VERSION"
     echo "  QT_MINIMUM_VERSION=$QT_MINIMUM_VERSION"
     echo "  QT_MODULES=$QT_MODULES"
-    echo "  GSTREAMER_VERSION=$GSTREAMER_VERSION"
+    echo "  GSTREAMER_MINIMUM_VERSION=$GSTREAMER_MINIMUM_VERSION"
+    echo "  GSTREAMER_MACOS_VERSION=$GSTREAMER_MACOS_VERSION"
     echo "  GSTREAMER_ANDROID_VERSION=$GSTREAMER_ANDROID_VERSION"
-    echo "  GSTREAMER_WINDOWS_VERSION=$GSTREAMER_WINDOWS_VERSION"
     echo "  XCODE_VERSION=$XCODE_VERSION"
+    echo "  XCODE_IOS_VERSION=$XCODE_IOS_VERSION"
     echo "  NDK_VERSION=$NDK_VERSION"
     echo "  NDK_FULL_VERSION=$NDK_FULL_VERSION"
     echo "  JAVA_VERSION=$JAVA_VERSION"
@@ -118,8 +127,5 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "  ANDROID_MIN_SDK=$ANDROID_MIN_SDK"
     echo "  ANDROID_BUILD_TOOLS=$ANDROID_BUILD_TOOLS"
     echo "  ANDROID_CMDLINE_TOOLS=$ANDROID_CMDLINE_TOOLS"
-    echo "  CCACHE_VERSION=$CCACHE_VERSION"
-    echo "  CCACHE_MAX_SIZE=$CCACHE_MAX_SIZE"
-    echo "  CLANG_FORMAT_VERSION=$CLANG_FORMAT_VERSION"
-    echo "  NODE_VERSION=$NODE_VERSION"
+    echo "  CMAKE_MINIMUM_VERSION=$CMAKE_MINIMUM_VERSION"
 fi

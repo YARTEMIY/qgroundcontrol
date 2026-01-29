@@ -1,22 +1,11 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "QGCCachedTileSet.h"
-
-#include <QtNetwork/QNetworkProxy>
 
 #include "ElevationMapProvider.h"
 #include "QGCApplication.h"
-#include "QGCFileDownload.h"
 #include "QGCLoggingCategory.h"
 #include "QGCMapEngine.h"
 #include "QGCMapEngineManager.h"
+#include "QGCNetworkHelper.h"
 #include "QGCMapTasks.h"
 #include "QGCMapUrlEngine.h"
 #include "QGeoFileTileCacheQGC.h"
@@ -108,11 +97,7 @@ void QGCCachedTileSet::_tileListFetched(const QQueue<QGCTile*> &tiles)
 
     if (!_networkManager) {
         _networkManager = new QNetworkAccessManager(this);
-#if !defined(Q_OS_IOS) && !defined(Q_OS_ANDROID)
-        QNetworkProxy proxy = _networkManager->proxy();
-        proxy.setType(QNetworkProxy::DefaultProxy);
-        _networkManager->setProxy(proxy);
-#endif
+        QGCNetworkHelper::configureProxy(_networkManager);
     }
 
     _tilesToDownload.append(tiles);
@@ -164,7 +149,7 @@ void QGCCachedTileSet::_prepareDownload()
 
         QNetworkReply* const reply = _networkManager->get(request);
         reply->setParent(this);
-        QGCFileDownload::setIgnoreSSLErrorsIfNeeded(*reply);
+        QGCNetworkHelper::ignoreSslErrorsIfNeeded(reply);
         (void) connect(reply, &QNetworkReply::finished, this, &QGCCachedTileSet::_networkReplyFinished);
         (void) connect(reply, &QNetworkReply::errorOccurred, this, &QGCCachedTileSet::_networkReplyError);
         (void) _replies.insert(tile->hash, reply);

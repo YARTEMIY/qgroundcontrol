@@ -1,17 +1,7 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
-
 #include "ComponentInformationTranslation.h"
 #include "QGCCachedFileDownload.h"
 #include "JsonHelper.h"
-#include "QGCLZMA.h"
+#include "QGCCompression.h"
 #include "QGCLoggingCategory.h"
 
 #include <QtCore/QStandardPaths>
@@ -80,15 +70,12 @@ void ComponentInformationTranslation::onDownloadCompleted(QString remoteFile, QS
     QString tsFileName = localFile;
     bool deleteFile = false;
     if (errorMsg.isEmpty()) {
-
-        // Decompress if needed
-        if (localFile.endsWith(".lzma", Qt::CaseInsensitive) || localFile.endsWith(".xz", Qt::CaseInsensitive)) {
-            tsFileName = QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation)).absoluteFilePath("qgc_translation_file_decompressed.ts");
-            if (QGCLZMA::inflateLZMAFile(localFile, tsFileName)) {
-                deleteFile = true;
-            } else {
-                errorMsg = "Inflate of compressed json failed, " + remoteFile;
-            }
+        const QString tempPath = QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation)).absoluteFilePath("qgc_translation_file_decompressed.ts");
+        tsFileName = QGCCompression::decompressIfNeeded(localFile, tempPath, false);
+        if (tsFileName.isEmpty()) {
+            errorMsg = "Decompression of translation file failed: " + remoteFile;
+        } else if (tsFileName != localFile) {
+            deleteFile = true;  // Mark for cleanup since we decompressed
         }
     }
 

@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 // TODO: https://github.com/PX4/PX4-Autopilot/blob/main/Tools/geotag_images_ulog.py
 
 #include "GeoTagWorker.h"
@@ -140,7 +131,7 @@ bool GeoTagWorker::_parseLogs()
     bool parseComplete = false;
     QString errorString;
     if (_logFile.endsWith(".ulg", Qt::CaseSensitive)) {
-        parseComplete = ULogParser::getTagsFromLog(log, _triggerList, errorString);
+        parseComplete = ULogParser::getTagsFromLogStreamed(log, _triggerList, errorString);
     } else {
         parseComplete = PX4LogParser::getTagsFromLog(log, _triggerList);
     }

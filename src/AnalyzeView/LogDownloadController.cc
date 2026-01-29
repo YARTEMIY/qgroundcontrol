@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "LogDownloadController.h"
 #include "AppSettings.h"
 #include "LogEntry.h"
@@ -638,4 +629,36 @@ void LogDownloadController::_setListing(bool active)
         _vehicle->vehicleLinkManager()->setCommunicationLostEnabled(!active);
         emit requestingListChanged();
     }
+}
+
+void LogDownloadController::setCompressLogs(bool compress)
+{
+    if (_compressLogs != compress) {
+        _compressLogs = compress;
+        emit compressLogsChanged();
+    }
+}
+
+bool LogDownloadController::compressLogFile(const QString &logPath)
+{
+    Q_UNUSED(logPath)
+    qCWarning(LogDownloadControllerLog) << "Log compression not yet implemented (decompression-only API)";
+    return false;
+}
+
+void LogDownloadController::cancelCompression()
+{
+    // Not implemented - compression API is decompression-only
+}
+
+void LogDownloadController::_handleCompressionProgress(qreal progress)
+{
+    Q_UNUSED(progress)
+    // Not implemented - compression API is decompression-only
+}
+
+void LogDownloadController::_handleCompressionFinished(bool success)
+{
+    Q_UNUSED(success)
+    // Not implemented - compression API is decompression-only
 }

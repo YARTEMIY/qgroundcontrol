@@ -1,5 +1,6 @@
 name: iOS
 
+# iOS builds are experimental - manual trigger only until stable
 on:
   workflow_dispatch:
 
@@ -11,10 +12,11 @@ permissions:
   contents: read
   id-token: write
   attestations: write
+  actions: read
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 120
 
     strategy:
@@ -29,6 +31,11 @@ jobs:
       PACKAGE: QGroundControl
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       - name: Checkout repo
         uses: actions/checkout@v6
         with:
@@ -87,7 +94,7 @@ jobs:
 
       - name: Attest Build Provenance
         if: matrix.build_type == 'Release' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-path: '${{ runner.temp }}/build/${{ env.PACKAGE }}.app'
 

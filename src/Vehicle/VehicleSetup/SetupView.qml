@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -219,20 +210,6 @@ Rectangle {
                 text:               qsTr("Optical Flow")
                 Layout.fillWidth:   true
                 onClicked:          showPanel(this, "qrc:/qml/QGroundControl/VehicleSetup/OpticalFlowSensor.qml");
-            }
-
-            ConfigButton {
-                id:                 joystickButton
-                icon.source:      "/qmlimages/Joystick.png"
-                setupComplete:      _activeJoystick ? _activeJoystick.calibrated || _buttonsOnly : false
-                visible:            _fullParameterVehicleAvailable && joystickManager.joysticks.length !== 0
-                text:               _forcedToButtonsOnly ? qsTr("Buttons") : qsTr("Joystick")
-                Layout.fillWidth:   true
-                onClicked:          showPanel(this, "qrc:/qml/QGroundControl/VehicleSetup/JoystickConfig.qml")
-
-                property Joystick _activeJoystick: joystickManager.activeJoystick
-                property bool   _buttonsOnly:           _activeJoystick ? _activeJoystick.axisCount == 0 : false
-                property bool   _forcedToButtonsOnly:   !QGroundControl.corePlugin.options.allowJoystickSelection && _buttonsOnly
             }
 
             Repeater {

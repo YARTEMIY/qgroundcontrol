@@ -1,13 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
-
 /// @file
 ///     @brief Unit test for QGCGeo coordinate transformation math.
 ///
@@ -36,6 +26,25 @@ private slots:
     void _convertUTMToGeo_test(void);
     void _convertGeoToMGRS_test(void);
     void _convertMGRSToGeo_test(void);
+
+    void _convertGeodeticToEcef_test(void);
+    void _convertEcefToGeodetic_test(void);
+    void _convertGpsToEnu_test(void);
+    void _convertEnuToGps_test(void);
+    void _convertEcefToEnu_test(void);
+    void _convertEnuToEcef_test(void);
+
+    void _geodesicDistance_test(void);
+    void _geodesicAzimuth_test(void);
+    void _geodesicDestination_test(void);
+    void _geodesicRoundTrip_test(void);
+
+    void _pathLength_test(void);
+    void _polygonArea_test(void);
+    void _polygonPerimeter_test(void);
+
+    void _interpolatePath_test(void);
+    void _interpolateAtDistance_test(void);
 
 private:
      /// Use ETH campus (47.3764° N, 8.5481° E)

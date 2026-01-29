@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #pragma once
 
 #include <QtCore/QList>
@@ -20,7 +11,11 @@ class QString;
 Q_DECLARE_LOGGING_CATEGORY(ULogParserLog)
 
 namespace ULogParser {
-    /// Get GeoTags from a ULog
+    /// Get GeoTags from a ULog (stores full log in memory)
     ///     @return true if failed, errorMessage set
     bool getTagsFromLog(const QByteArray &log, QList<GeoTagWorker::CameraFeedbackPacket> &cameraFeedback, QString &errorMessage);
+
+    /// Get GeoTags from a ULog using streamed parsing (lower memory usage)
+    ///     @return true if failed, errorMessage set
+    bool getTagsFromLogStreamed(const QByteArray &log, QList<GeoTagWorker::CameraFeedbackPacket> &cameraFeedback, QString &errorMessage);
 } // namespace ULogParser

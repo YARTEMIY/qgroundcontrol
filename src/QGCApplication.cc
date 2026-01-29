@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "QGCApplication.h"
 
 #include <QtCore/QEvent>
@@ -16,7 +7,7 @@
 #include <QtCore/QRegularExpression>
 #include <QtGui/QFontDatabase>
 #include <QtGui/QIcon>
-#include <QtNetwork/QNetworkProxyFactory>
+#include "QGCNetworkHelper.h"
 #include <QtQml/QQmlApplicationEngine>
 #include <QtQml/QQmlContext>
 #include <QtQuick/QQuickImageProvider>
@@ -66,7 +57,7 @@ QGCApplication::QGCApplication(int &argc, char *argv[], const QGCCommandLinePars
     _msecsElapsedTime.start();
 
     // Setup for network proxy support
-    QNetworkProxyFactory::setUseSystemConfiguration(true);
+    QGCNetworkHelper::initializeProxySupport();
 
     bool fClearSettingsOptions = cli.clearSettingsOptions;  // Clear stored settings
     const bool fClearCache = cli.clearCache;                // Clear parameter/airframe caches

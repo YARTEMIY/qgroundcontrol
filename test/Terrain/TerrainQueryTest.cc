@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "TerrainQueryTest.h"
 #include "TerrainTileManager.h"
 #include "TerrainQuery.h"
@@ -193,6 +184,54 @@ void TerrainQueryTest::_testRequestCarpetHeights()
     QVERIFY(!arguments.at(3).toList().isEmpty());
     QVERIFY(!arguments.at(3).toList().constFirst().toList().isEmpty());
     QVERIFY(arguments.at(3).toList().constFirst().toList().constFirst().toDouble() == UnitTestTerrainQuery::Flat10Region::amslElevation);
+}
+
+void TerrainQueryTest::_testRequestCarpetHeightsInvalidBounds()
+{
+    UnitTestTerrainQuery* const query = new UnitTestTerrainQuery(this);
+    QSignalSpy spy(query, &UnitTestTerrainQuery::carpetHeightsReceived);
+    QVERIFY(spy.isValid());
+
+    // SW and NE are reversed (NE is actually SW)
+    const QGeoCoordinate sw = QGeoCoordinate(pointNemo.latitude() + UnitTestTerrainQuery::regionSizeDeg, pointNemo.longitude() + UnitTestTerrainQuery::regionSizeDeg);
+    const QGeoCoordinate ne = pointNemo;
+    query->requestCarpetHeights(sw, ne, false);
+
+    const QVariantList arguments = spy.takeFirst();
+    QVERIFY(arguments.at(0).toBool() == false);
+    QVERIFY(qIsNaN(arguments.at(1).toDouble()));
+    QVERIFY(qIsNaN(arguments.at(2).toDouble()));
+}
+
+void TerrainQueryTest::_testPolyPathQueryEmptyPath()
+{
+    TerrainPolyPathQuery* const query = new TerrainPolyPathQuery(true, this);
+    QSignalSpy spy(query, &TerrainPolyPathQuery::terrainDataReceived);
+    QVERIFY(spy.isValid());
+
+    const QList<QGeoCoordinate> emptyPath;
+    query->requestData(emptyPath);
+
+    // Signal is emitted synchronously for invalid path
+    QCOMPARE(spy.count(), 1);
+    const QVariantList arguments = spy.takeFirst();
+    QVERIFY(arguments.at(0).toBool() == false);
+}
+
+void TerrainQueryTest::_testPolyPathQuerySingleCoord()
+{
+    TerrainPolyPathQuery* const query = new TerrainPolyPathQuery(true, this);
+    QSignalSpy spy(query, &TerrainPolyPathQuery::terrainDataReceived);
+    QVERIFY(spy.isValid());
+
+    QList<QGeoCoordinate> singleCoordPath;
+    (void) singleCoordPath.append(pointNemo);
+    query->requestData(singleCoordPath);
+
+    // Signal is emitted synchronously for invalid path
+    QCOMPARE(spy.count(), 1);
+    const QVariantList arguments = spy.takeFirst();
+    QVERIFY(arguments.at(0).toBool() == false);
 }
 
 // Test Requires Internet, so disable by default.

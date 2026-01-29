@@ -1,18 +1,9 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "ComponentInformationManager.h"
 #include "ComponentInformationTranslation.h"
 #include "ComponentInformationCache.h"
 #include "Vehicle.h"
 #include "FTPManager.h"
-#include "QGCLZMA.h"
+#include "QGCCompression.h"
 #include "CompInfoGeneral.h"
 #include "CompInfoParam.h"
 #include "CompInfoEvents.h"
@@ -329,18 +320,10 @@ void RequestMetaDataTypeStateMachine::_stateRequestCompInfoDeprecated(StateMachi
 
 QString RequestMetaDataTypeStateMachine::_downloadCompleteJsonWorker(const QString& fileName)
 {
-    QString outputFileName = fileName;
-
-    if (fileName.endsWith(".lzma", Qt::CaseInsensitive) || fileName.endsWith(".xz", Qt::CaseInsensitive)) {
-        outputFileName = (QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation)).absoluteFilePath(_currentCacheFileTag));
-        if (QGCLZMA::inflateLZMAFile(fileName, outputFileName)) {
-            QFile(fileName).remove();
-        } else {
-            qCWarning(ComponentInformationManagerLog) << "Inflate of compressed json failed" << _currentCacheFileTag;
-            outputFileName.clear();
-        }
-    } else {
-        outputFileName = fileName;
+    const QString tempPath = QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation)).absoluteFilePath(_currentCacheFileTag);
+    QString outputFileName = QGCCompression::decompressIfNeeded(fileName, tempPath);
+    if (outputFileName.isEmpty()) {
+        qCWarning(ComponentInformationManagerLog) << "Inflate of compressed json failed" << _currentCacheFileTag;
     }
 
     if (_currentFileValidCrc) {

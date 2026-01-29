@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #pragma once
 
 #include <QtCore/QLoggingCategory>
@@ -41,6 +32,7 @@ class MissionCommandTreeTest;
 /// enumStrings     string              String              Strings to show in combo box for selection
 /// enumValues      string              String              Values associated with each enum string
 /// nanUnchanged    bool    false       Bool                True: value can be set to NaN to signal unchanged
+/// advanced        bool    false       Bool                True: mark parameter as advanced-only for UI selection
 ///
 /// Note on NaN usage:
 ///     To indicate a NaN as a value in the json file use the value 'null' (with no quotes)
@@ -68,6 +60,7 @@ public:
     Q_PROPERTY(double       max             READ max            CONSTANT)
     Q_PROPERTY(double       userMin         READ userMin        CONSTANT)
     Q_PROPERTY(double       userMax         READ userMax        CONSTANT)
+    Q_PROPERTY(bool         advanced        READ advanced       CONSTANT)
 
     int             decimalPlaces   (void) const { return _decimalPlaces; }
     double          defaultValue    (void) const { return _defaultValue; }
@@ -81,6 +74,7 @@ public:
     double          max             (void) const { return _max; }
     double          userMin         (void) const { return _userMin; }
     double          userMax         (void) const { return _userMax; }
+    bool            advanced        (void) const { return _advanced; }
 
 private:
     int             _decimalPlaces;
@@ -91,6 +85,7 @@ private:
     int             _param;
     QString         _units;
     bool            _nanUnchanged;
+    bool            _advanced;
     double          _min;
     double          _max;
     double          _userMin;
@@ -201,6 +196,7 @@ private:
     static constexpr const char* _enumStringsJsonKey           = "enumStrings";
     static constexpr const char* _enumValuesJsonKey            = "enumValues";
     static constexpr const char* _nanUnchangedJsonKey          = "nanUnchanged";
+    static constexpr const char* _advancedJsonKey              = "advanced";
     static constexpr const char* _friendlyEditJsonKey          = "friendlyEdit";
     static constexpr const char* _friendlyNameJsonKey          = "friendlyName";
     static constexpr const char* _idJsonKey                    = "id";

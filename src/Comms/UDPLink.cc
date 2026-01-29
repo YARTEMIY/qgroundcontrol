@@ -1,16 +1,7 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #include "UDPLink.h"
 #include "AutoConnectSettings.h"
-#include "DeviceInfo.h"
 #include "QGCLoggingCategory.h"
+#include "QGCNetworkHelper.h"
 #include "SettingsManager.h"
 
 #include <QtCore/QMutexLocker>
@@ -651,5 +642,5 @@ void UDPLink::_writeBytes(const QByteArray& bytes)
 
 bool UDPLink::isSecureConnection() const
 {
-    return QGCDeviceInfo::isNetworkEthernet();
+    return QGCNetworkHelper::isNetworkEthernet();
 }

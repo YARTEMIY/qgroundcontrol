@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #pragma once
 
 #include <QtCore/QLoggingCategory>
@@ -37,6 +28,9 @@ public:
 
     Q_INVOKABLE void spektrumBindMode(int mode);
     Q_INVOKABLE void crsfBindMode();
+
+    // Overrides from RemoteControlCalibrationController
+    void start() final override;
 
 signals:
     /// Signalled to indicate cal failure due to reversed throttle

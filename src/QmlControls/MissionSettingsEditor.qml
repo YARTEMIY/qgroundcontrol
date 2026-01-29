@@ -17,6 +17,7 @@ Rectangle {
     property var _masterController: masterController
     property var _missionController: _masterController.missionController
     property var _controllerVehicle: _masterController.controllerVehicle
+    property var _visualItems: _missionController.visualItems
     property bool _vehicleHasHomePosition: _controllerVehicle.homePosition.isValid
     property bool _showCruiseSpeed: !_controllerVehicle.multiRotor
     property bool _showHoverSpeed: _controllerVehicle.multiRotor || _controllerVehicle.vtol
@@ -25,10 +26,9 @@ Rectangle {
     property real _fieldWidth: ScreenTools.defaultFontPixelWidth * 16
     property bool _mobile: ScreenTools.isMobile
     property var _savePath: QGroundControl.settingsManager.appSettings.missionSavePath
-    property var _fileExtension: QGroundControl.settingsManager.appSettings.missionFileExtension
     property var _appSettings: QGroundControl.settingsManager.appSettings
     property bool _waypointsOnlyMode: QGroundControl.corePlugin.options.missionWaypointsOnly
-    property bool _showCameraSection: (_waypointsOnlyMode || QGroundControl.corePlugin.showAdvancedUI) && !_controllerVehicle.apmFirmware
+    property bool _showCameraSection: _waypointsOnlyMode || QGroundControl.corePlugin.showAdvancedUI
     property bool _simpleMissionStart: QGroundControl.corePlugin.options.showSimpleMissionStart
     property bool _showFlightSpeed: !_controllerVehicle.vtol && !_simpleMissionStart && !_controllerVehicle.apmFirmware
     property bool _allowFWVehicleTypeSelection: _noMissionItemsAdded && !globals.activeVehicle
@@ -59,7 +59,7 @@ Rectangle {
 
         LabelledButton {
             Layout.fillWidth: true
-            label: qsTr("Global Altitude Mode")
+            label: qsTr("Altitude Mode")
             buttonText: QGroundControl.altitudeModeShortDescription(_missionController.globalAltitudeMode)
 
             onClicked: {
@@ -92,6 +92,36 @@ Rectangle {
             fact: QGroundControl.settingsManager.appSettings.defaultMissionItemAltitude
         }
 
+        QGCButton {
+            id: applyDefaultAltitudeButton
+            Layout.fillWidth: true
+            text: qsTr("Apply New Altitude")
+            visible: false
+
+            onClicked: mainWindow.showMessageDialog(qsTr("Apply New Altitude"),
+                            qsTr("You have changed the default altitude for mission items. Would you like to apply that altitude to all the items in the current mission?"),
+                            Dialog.Yes | Dialog.No,
+                            function() { applyDefaultAltitudeButton.visible = false; _missionController.applyDefaultMissionAltitude() })
+
+            Connections {
+                target: _appSettings.defaultMissionItemAltitude
+                function onRawValueChanged() {
+                    if (_visualItems.count > 1) {
+                        applyDefaultAltitudeButton.visible = true
+                    }
+                }
+            }
+
+            Connections {
+                target: _visualItems
+                function onCountChanged() {
+                    if (_visualItems.count <= 1) {
+                        applyDefaultAltitudeButton.visible = false
+                    }
+                }
+            }
+    }
+
         FactTextFieldSlider {
             Layout.fillWidth: true
             label: qsTr("Flight Speed")
@@ -103,6 +133,8 @@ Rectangle {
             onEnableCheckboxClicked: missionItem.speedSection.specifyFlightSpeed = enableCheckBoxChecked
         }
 
+        /*
+        Removed for now. May come back...
         SectionHeader {
             id: createFromTemplateSection
             Layout.fillWidth: true
@@ -166,12 +198,13 @@ Rectangle {
 
                         function _mapCenter() {
                             var centerPoint = Qt.point(editorMap.centerViewport.left + (editorMap.centerViewport.width / 2), editorMap.centerViewport.top + (editorMap.centerViewport.height / 2))
-                            return editorMap.toCoordinate(centerPoint, false /* clipToViewPort */)
+                            return editorMap.toCoordinate(centerPoint, false)
                         }
                     }
                 }
             }
         }
+        */
 
         Column {
             Layout.fillWidth: true
@@ -180,6 +213,8 @@ Rectangle {
 
             CameraSection {
                 id: cameraSection
+                anchors.left: parent.left
+                anchors.right: parent.right
                 visible: _showCameraSection
 
                 Component.onCompleted: checked = !_waypointsOnlyMode && missionItem.cameraSection.settingsSpecified

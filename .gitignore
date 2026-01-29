@@ -11,6 +11,11 @@
 .vs/
 .settings/
 
+# VS Code - track .default files, ignore personal overrides
+.vscode/*
+!.vscode/extensions.json
+!.vscode/*.default.json
+
 # Editor temp/backup files
 *.swp
 *~
@@ -151,12 +156,12 @@ Qt*-linux*.tar.*
 # Local Development Tools
 # ------------------------------------------------------------------------------
 
-# Claude Code
+# AI Assistants
 .claude/
-
-# cc-sessions - personal AI development workflow
-sessions/
-CLAUDE.md
+.claudeignore
+.geminiignore
+.cursorignore
+**/CLAUDE.md
 
 # Pre-commit hooks
 .ruff_cache/

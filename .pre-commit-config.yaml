@@ -12,7 +12,7 @@ repos:
         args: [--allow-multiple-documents, --unsafe]
       - id: check-json
       - id: pretty-format-json
-        args: ['--indent=2', '--no-ensure-ascii', '--check']
+        args: ['--indent=2', '--no-ensure-ascii']
         exclude: ^(translations/|package-lock\.json|src/|test/|resources/|deploy/|cmake/)
       - id: check-xml
         exclude: ^test/
@@ -28,7 +28,15 @@ repos:
         args: ['--fix=no']
         exclude: \.(bat|ps1)$
 
+  # Secret detection
+  - repo: https://github.com/trufflesecurity/trufflehog
+    rev: v3.92.4
+    hooks:
+      - id: trufflehog
+        args: ['--only-verified', '--exclude-paths=tools/configs/trufflehog-exclude.txt']
+
   # C++ formatting (check-only, use 'clang-format -i' to fix)
+  # Note: Install matching clang-format version locally to avoid formatting differences
   - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v21.1.7
     hooks:
@@ -107,28 +115,18 @@ repos:
 
   # Spell checking (report-only, doesn't auto-fix)
   - repo: https://github.com/crate-ci/typos
-    rev: v1
+    rev: v1.40.0
     hooks:
       - id: typos
         args: []  # Empty args disables auto-fix mode
 
-  # QGC-specific checks
-  - repo: local
+  # QGC-specific checks (defined in .pre-commit-hooks.yaml)
+  - repo: .
+    rev: HEAD
     hooks:
       - id: qmllint
-        name: Lint QML files
-        entry: bash -c 'if command -v qmllint &>/dev/null; then qmllint "$@"; else echo "qmllint not found - skipping (install Qt SDK or qt6-declarative-dev-tools)" >&2; exit 0; fi' --
-        language: system
-        files: \.qml$
-        exclude: ^build/
-        pass_filenames: true
-
+      - id: clazy
       - id: check-no-qassert
-        name: Check for Q_ASSERT in production code
-        entry: bash -c 'if grep -n "Q_ASSERT" "$@" 2>/dev/null; then echo "::warning::Q_ASSERT found. Consider defensive checks with early returns instead." >&2; fi; exit 0' --
-        language: system
-        types: [c++]
-        exclude: ^test/
-        pass_filenames: true
+      - id: vehicle-null-check
 
 exclude: ^build/

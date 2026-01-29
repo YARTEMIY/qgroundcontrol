@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 #pragma once
 
 #include <QtCore/QByteArray>
@@ -17,7 +8,7 @@
 #include "LinkInterface.h"
 #include "MAVLinkLib.h"
 
-class QGCTemporaryFile;
+class QFile;
 
 Q_DECLARE_LOGGING_CATEGORY(MAVLinkProtocolLog)
 
@@ -102,7 +93,7 @@ private:
     void _saveTelemetryLog(const QString &tempLogfile);
     bool _checkTelemetrySavePath();
 
-    QGCTemporaryFile * const _tempLogFile = nullptr;
+    QFile *_tempLogFile = nullptr;
 
     bool _logSuspendError = false;  ///< true: Logging suspended due to error
     bool _logSuspendReplay = false; ///< true: Logging suspended due to replay

@@ -1,12 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2020 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -29,7 +20,7 @@ SetupPage {
 
             FactPanelController { id: controller; }
 
-            QGCPalette { id: ggcPal; colorGroupEnabled: true }
+            QGCPalette { id: qgcPal; colorGroupEnabled: true }
 
             property Fact _batt1Monitor:                    controller.getParameterFact(-1, "BATT_MONITOR")
             property Fact _batt2Monitor:                    controller.getParameterFact(-1, "BATT2_MONITOR", false /* reportMissing */)
@@ -52,7 +43,9 @@ SetupPage {
             property Fact _failsafeBatt1CritVoltage:        controller.getParameterFact(-1, "BATT_CRT_VOLT", false /* reportMissing */)
             property Fact _failsafeBatt2CritVoltage:        controller.getParameterFact(-1, "BATT2_CRT_VOLT", false /* reportMissing */)
 
-            property Fact _armingCheck: controller.getParameterFact(-1, "ARMING_CHECK")
+            // Older firmwares use ARMING_CHECK. Newer firmwares use ARMING_SKIPCHK.
+            property Fact _armingCheck: controller.getParameterFact(-1, "ARMING_CHECK", false /* reportMissing */)
+            property Fact _armingSkipCheck: controller.getParameterFact(-1, "ARMING_SKIPCHK", false /* reportMissing */)
 
             property real _margins:         ScreenTools.defaultFontPixelHeight
             property real _innerMargin:     _margins / 2
@@ -148,7 +141,7 @@ SetupPage {
                 Rectangle {
                     width:  battery1FailsafeLoader.x + battery1FailsafeLoader.width + _margins
                     height: battery1FailsafeLoader.y + battery1FailsafeLoader.height + _margins
-                    color:  ggcPal.windowShade
+                    color:  qgcPal.windowShade
 
                     Loader {
                         id:                 battery1FailsafeLoader
@@ -182,7 +175,7 @@ SetupPage {
                 Rectangle {
                     width:  battery2FailsafeLoader.x + battery2FailsafeLoader.width + _margins
                     height: battery2FailsafeLoader.y + battery2FailsafeLoader.height + _margins
-                    color:  ggcPal.windowShade
+                    color:  qgcPal.windowShade
 
                     Loader {
                         id:                 battery2FailsafeLoader
@@ -281,7 +274,7 @@ SetupPage {
                         id:     failsafeSettings
                         width:  fsGrid.x + fsGrid.width + _margins
                         height: fsGrid.y + fsGrid.height + _margins
-                        color:  ggcPal.windowShade
+                        color:  qgcPal.windowShade
 
                         GridLayout {
                             id:                 fsGrid
@@ -346,7 +339,7 @@ SetupPage {
                     Rectangle {
                         width:  generalFailsafeColumn.x + generalFailsafeColumn.width + _margins
                         height: generalFailsafeColumn.y + generalFailsafeColumn.height + _margins
-                        color:  ggcPal.windowShade
+                        color:  qgcPal.windowShade
 
                         Column {
                             id:                 generalFailsafeColumn
@@ -418,7 +411,7 @@ SetupPage {
                     Rectangle {
                         width:  mainLayout.width + (_margins * 2)
                         height: mainLayout.height + (_margins * 2)
-                        color:  ggcPal.windowShade
+                        color:  qgcPal.windowShade
 
                         ColumnLayout {
                             id:         mainLayout
@@ -546,7 +539,7 @@ SetupPage {
                         id:     rtlSettings
                         width:  landSpeedField.x + landSpeedField.width + _margins
                         height: landSpeedField.y + landSpeedField.height + _margins
-                        color:  ggcPal.windowShade
+                        color:  qgcPal.windowShade
 
                         QGCColoredImage {
                             id:                 icon
@@ -556,7 +549,7 @@ SetupPage {
                             anchors.top:        parent.top
                             height:             ScreenTools.defaultFontPixelWidth * 20
                             width:              ScreenTools.defaultFontPixelWidth * 20
-                            color:              ggcPal.text
+                            color:              qgcPal.text
                             sourceSize.width:   width
                             mipmap:             true
                             fillMode:           Image.PreserveAspectFit
@@ -713,14 +706,14 @@ SetupPage {
                 spacing: _margins / 2
 
                 QGCLabel {
-                    text:           qsTr("Arming Checks")
+                    text:           _armingCheck ? qsTr("Arming Checks") : qsTr("Skip Arming Checks")
                     font.bold:      true
                 }
 
                 Rectangle {
                     width:  flowLayout.width
                     height: armingCheckInnerColumn.height + (_margins * 2)
-                    color:  ggcPal.windowShade
+                    color:  qgcPal.windowShade
 
                     Column {
                         id:                 armingCheckInnerColumn
@@ -734,8 +727,8 @@ SetupPage {
                             id:                 armingCheckBitmask
                             anchors.left:       parent.left
                             anchors.right:      parent.right
-                            firstEntryIsAll:    true
-                            fact:               _armingCheck
+                            firstEntryIsAll:    _armingCheck ? true : false
+                            fact:               _armingCheck ? _armingCheck : _armingSkipCheck
                         }
 
                         QGCLabel {
@@ -745,7 +738,7 @@ SetupPage {
                             wrapMode:       Text.WordWrap
                             color:          qgcPal.warningText
                             text:            qsTr("Warning: Turning off arming checks can lead to loss of Vehicle control.")
-                            visible:        _armingCheck.value != 1
+                            visible:        _armingCheck ? _armingCheck.value != 1 : _armingSkipCheck.value != 0
                         }
                     }
                 } // Rectangle - Arming checks

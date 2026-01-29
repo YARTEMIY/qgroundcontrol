@@ -69,11 +69,11 @@ lint:
 
 # Check code formatting (no changes)
 format:
-    ./tools/format-check.sh --check
+    ./tools/analyze.sh --tool clang-format
 
 # Format code (apply fixes)
 format-fix:
-    ./tools/format-check.sh
+    ./tools/analyze.sh --tool clang-format --fix
 
 # Run static analysis
 analyze:
@@ -112,10 +112,6 @@ info:
     @echo "Qt dir:      {{qt_dir}}"
     @echo "Build type:  {{build_type}}"
     @echo "Build dir:   {{build_dir}}"
-
-# Update copyright headers
-update-headers:
-    python3 ./tools/update-headers.py
 
 # Check dependency versions
 check-deps:
