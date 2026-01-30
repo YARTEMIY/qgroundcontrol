@@ -145,6 +145,18 @@ protected:
     void _appendComplexItemSpecificActions(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, MAV_FRAME mavFrame, const TransectStyleComplexItem::CoordInfo_t& coordInfo, bool isLastItem) final;
 
 private:
+    struct SprayedSegment {
+        QGeoCoordinate p1;
+        QGeoCoordinate p2;
+    };
+    int _actionIteratorIndex = 0;
+    bool _simulatedSprayerState = false;
+    QList<SprayedSegment> _sprayedHistory;
+
+    bool _isPathRedundant(const QGeoCoordinate& p1, const QGeoCoordinate& p2) const;
+    bool _checkLineOverlap(const QGeoCoordinate& currStart, const QGeoCoordinate& currEnd,
+                           const QGeoCoordinate& histStart, const QGeoCoordinate& histEnd) const;
+
     enum CameraTriggerCode {
         CameraTriggerNone,
         CameraTriggerOn,

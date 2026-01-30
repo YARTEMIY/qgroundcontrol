@@ -259,22 +259,104 @@ void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject*
     }
 }
 
+struct Vec2 { double x; double y; };
+
+bool AgroComplexItem::_isPathRedundant(const QGeoCoordinate& p1, const QGeoCoordinate& p2) const
+{
+    for (const auto& seg : _sprayedHistory) {
+        if (_checkLineOverlap(p1, p2, seg.p1, seg.p2)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool AgroComplexItem::_checkLineOverlap(const QGeoCoordinate& currStart, const QGeoCoordinate& currEnd,
+                                        const QGeoCoordinate& histStart, const QGeoCoordinate& histEnd) const
+{
+    double y, x, d;
+    
+    QGCGeo::convertGeoToNed(currEnd, currStart, y, x, d);
+    Vec2 V = {x, y};
+
+    QGCGeo::convertGeoToNed(histStart, currStart, y, x, d);
+    Vec2 H1 = {x, y};
+
+    QGCGeo::convertGeoToNed(histEnd, currStart, y, x, d);
+    Vec2 H2 = {x, y};
+
+    double lenSq = (V.x * V.x) + (V.y * V.y);
+    if (lenSq < 0.01) return false;
+    double len = sqrt(lenSq);
+
+    Vec2 V_norm = {V.x / len, V.y / len};
+    Vec2 H_vec = {H2.x - H1.x, H2.y - H1.y};
+    double h_len = sqrt(H_vec.x * H_vec.x + H_vec.y * H_vec.y);
+    if (h_len < 0.01) return false;
+    
+    double dot = (V_norm.x * (H_vec.x / h_len)) + (V_norm.y * (H_vec.y / h_len));
+    
+    if (std::abs(dot) < 0.9) return false;
+
+    auto distToLine = [&](Vec2 P) {
+        return std::abs(P.x * V.y - P.y * V.x) / len;
+    };
+
+    double lateralDist1 = distToLine(H1);
+    double lateralDist2 = distToLine(H2);
+
+    const double lateralTolerance = 1.0; 
+
+    if (lateralDist1 > lateralTolerance && lateralDist2 > lateralTolerance) {
+        return false;
+    }
+
+    auto getT = [&](Vec2 P) {
+        return (P.x * V.x + P.y * V.y) / lenSq;
+    };
+
+    double t1 = getT(H1);
+    double t2 = getT(H2);
+
+    double minT = std::min(t1, t2);
+    double maxT = std::max(t1, t2);
+
+    double overlapStart = std::max(0.0, minT);
+    double overlapEnd   = std::min(1.0, maxT);
+
+    if (overlapStart >= overlapEnd) {
+        return false;
+    }
+
+    double overlapLen = (overlapEnd - overlapStart) * len;
+
+    if (overlapLen > 1.0) {
+        return true;
+    }
+
+    return false;
+}
+
 void AgroComplexItem::_appendComplexItemGlobalSettings(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum)
 {
-    if (_isExclusionZoneFact.rawValue().toBool()) return;
+    if (_isExclusionZoneFact.rawValue().toBool()) {
+        return;
+    }
 
-    // Скорость
+    _actionIteratorIndex = 0;
+    _sprayedHistory.clear();
+    _simulatedSprayerState = false;
+
     double speed = _vehicleSpeedFact.rawValue().toDouble();
     if (speed > 0) {
         items.append(new MissionItem(seqNum++, MAV_CMD_DO_CHANGE_SPEED, MAV_FRAME_MISSION,
                                      1, speed, -1, 0, 0, 0, 0, true, false, missionItemParent));
     }
 
-    // ВКЛЮЧАЕМ ОПРЫСКИВАТЕЛЬ (один раз на всю миссию Agro)
     _appendSprayerCommand(items, missionItemParent, seqNum, true);
+    _simulatedSprayerState = true;
 }
 
-// 2. Выключаем только в самом конце
 void AgroComplexItem::_appendComplexItemSpecificActions(
     QList<MissionItem*>& items, 
     QObject* missionItemParent, 
@@ -286,13 +368,45 @@ void AgroComplexItem::_appendComplexItemSpecificActions(
     Q_UNUSED(mavFrame);
     Q_UNUSED(coordInfo);
 
-    if (_isExclusionZoneFact.rawValue().toBool()) return;
-
-    // Если это последняя точка всего маршрута
-    if (isLastItem) {
-        _appendSprayerCommand(items, missionItemParent, seqNum, false);
+    if (_isExclusionZoneFact.rawValue().toBool()) {
+        return;
     }
+
+    if (isLastItem) {
+        if (_simulatedSprayerState) {
+            _appendSprayerCommand(items, missionItemParent, seqNum, false);
+            _simulatedSprayerState = false;
+        }
+        return;
+    }
+
+    if (_actionIteratorIndex >= _rgFlightPathCoordInfo.count() - 1) {
+        return;
+    }
+
+    QGeoCoordinate currentPoint = _rgFlightPathCoordInfo[_actionIteratorIndex].coord;
+    
+    QGeoCoordinate nextPoint = _rgFlightPathCoordInfo[_actionIteratorIndex + 1].coord;
+
+    bool isDuplicate = _isPathRedundant(currentPoint, nextPoint);
+
+    if (isDuplicate) {
+        if (_simulatedSprayerState) {
+            _appendSprayerCommand(items, missionItemParent, seqNum, false);
+            _simulatedSprayerState = false;
+        }
+    } else {
+        if (!_simulatedSprayerState) {
+            _appendSprayerCommand(items, missionItemParent, seqNum, true);
+            _simulatedSprayerState = true;
+        }
+        
+        _sprayedHistory.append({currentPoint, nextPoint});
+    }
+
+    _actionIteratorIndex++;
 }
+
 void AgroComplexItem::save(QJsonArray&  planItems)
 {
     QJsonObject saveObject;
