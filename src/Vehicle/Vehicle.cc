@@ -4161,7 +4161,7 @@ void Vehicle::toggleSprayer()
         MAV_CMD_DO_SET_ACTUATOR,
         true,
         qQNaN(),
-        actuatorValue, qQNaN(), qQNaN(), qQNaN(), qQNaN(), 0
+        actuatorValue, qQNaN(), qQNaN(), qQNaN(), qQNaN(), 0.0f
     );
      _say(QString("Sprayer %1").arg(_sprayerActive ? "On" : "Off"));
 }

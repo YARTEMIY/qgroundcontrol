@@ -1283,6 +1283,7 @@ void Joystick::_executeButtonAction(const QString &action, const ButtonEvent_t b
         { _buttonActionMotorInterlockEnable,    ButtonEventDownTransition,  [this]() { emit motorInterlock(true); } },
         { _buttonActionMotorInterlockDisable,   ButtonEventDownTransition,  [this]() { emit motorInterlock(false); } },
         { _buttonActionToggleSprayer,           ButtonEventDownTransition,  [this]() { emit toggleSprayer(); } },
+        { _buttonActionToggleSprayer,           ButtonEventUpTransition,    [this]() { emit toggleSprayer(); } },
     });
 
     // First check for flight mode match
