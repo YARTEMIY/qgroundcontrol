@@ -1291,6 +1291,8 @@ public:
     /// Command vehicle to Enable/Disable Motor Interlock
     Q_INVOKABLE void motorInterlock(bool enable);
 
+    Q_INVOKABLE void toggleSprayer();
+
 /*---------------------------------------------------------------------------*/
 /*===========================================================================*/
 /*                         CONTROL STATUS HANDLER                            */
@@ -1440,6 +1442,8 @@ private:
     void _createCameraManager();
 
     QGCCameraManager *_cameraManager = nullptr;
+
+    bool _sprayerActive = false;
 
 /*---------------------------------------------------------------------------*/
 };

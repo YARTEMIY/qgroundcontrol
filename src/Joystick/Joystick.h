@@ -156,6 +156,7 @@ signals:
     void landingGearDeploy();
     void landingGearRetract();
     void motorInterlock(bool enable);
+    void toggleSprayer(); 
     void unknownAction(const QString &action);
     void vehicleJoystickData(float roll, float pitch, float yaw, float throttle, uint16_t buttonsLow, uint16_t buttonsHigh, float gimbalPitch, float gimbalYaw);
     void rawChannelValuesChanged(QVector<int> channelValues); ///< Signalled during PollingForConfiguration
@@ -276,6 +277,7 @@ private:
     static constexpr const char *_buttonActionLandingGearRetract=  QT_TR_NOOP("Landing gear retract");
     static constexpr const char *_buttonActionMotorInterlockEnable=   QT_TR_NOOP("Motor Interlock enable");
     static constexpr const char *_buttonActionMotorInterlockDisable=  QT_TR_NOOP("Motor Interlock disable");
+    static constexpr const char *_buttonActionToggleSprayer =         QT_TR_NOOP("Toggle Sprayer");
 
     friend class JoystickManager;
     friend class JoystickConfigController;
