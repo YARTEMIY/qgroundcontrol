@@ -164,6 +164,9 @@ protected:
         CoordType       coordType;
     } CoordInfo_t;
 
+    virtual void _appendComplexItemGlobalSettings(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum);
+    virtual void _appendComplexItemSpecificActions(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, MAV_FRAME mavFrame, const CoordInfo_t& coordInfo, bool isLastItem);
+
     QVariantList                                _visualTransectPoints;                          ///< Used to draw the flight path visuals on the screen
     QList<QList<CoordInfo_t>>                   _transects;
     QList<TerrainPathQuery::PathHeightInfo_t>   _rgPathHeightInfo;                              ///< Path height for each segment includes turn segments

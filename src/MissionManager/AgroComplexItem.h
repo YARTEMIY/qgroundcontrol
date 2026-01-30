@@ -84,7 +84,6 @@ public:
     void    save                (QJsonArray&  planItems) final;
     bool    specifiesCoordinate (void) const final { return !_isExclusionZoneFact.rawValue().toBool(); }
     double  timeBetweenShots    (void) final;
-    void    appendMissionItems  (QList<MissionItem*>& items, QObject* missionItemParent);
     void    _appendVisualAction(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, MAV_FRAME frame, const QGeoCoordinate& coord);
 
     // Overrides from VisualMissionionItem
@@ -140,6 +139,10 @@ private slots:
     void _recalcCameraShots             (void) final;
 
     void _recalcSpeedFromRate           (void);
+
+protected:
+    void _appendComplexItemGlobalSettings(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum) final;
+    void _appendComplexItemSpecificActions(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, MAV_FRAME mavFrame, const TransectStyleComplexItem::CoordInfo_t& coordInfo, bool isLastItem) final;
 
 private:
     enum CameraTriggerCode {

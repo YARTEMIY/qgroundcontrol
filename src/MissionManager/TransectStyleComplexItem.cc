@@ -1202,6 +1202,23 @@ TransectStyleComplexItem::BuildMissionItemsState_t TransectStyleComplexItem::_bu
     return state;
 }
 
+void TransectStyleComplexItem::_appendComplexItemGlobalSettings(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum)
+{
+    Q_UNUSED(items);
+    Q_UNUSED(missionItemParent);
+    Q_UNUSED(seqNum);
+}
+
+void TransectStyleComplexItem::_appendComplexItemSpecificActions(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, MAV_FRAME mavFrame, const TransectStyleComplexItem::CoordInfo_t& coordInfo, bool isLastItem)
+{
+    Q_UNUSED(items);
+    Q_UNUSED(missionItemParent);
+    Q_UNUSED(seqNum);
+    Q_UNUSED(mavFrame);
+    Q_UNUSED(coordInfo);
+    Q_UNUSED(isLastItem);
+}
+
 void TransectStyleComplexItem::_buildAndAppendMissionItems(QList<MissionItem*>& items, QObject* missionItemParent)
 {
     int                         seqNum      = _sequenceNumber;
@@ -1228,9 +1245,12 @@ void TransectStyleComplexItem::_buildAndAppendMissionItems(QList<MissionItem*>& 
         break;
     }
 
+    _appendComplexItemGlobalSettings(items, missionItemParent, seqNum);
+
     // Note: The code below is written to be understable as opposed to being compact and/or remove all duplicate code
     for (int coordIndex=0; coordIndex<_rgFlightPathCoordInfo.count(); coordIndex++) {
         const CoordInfo_t& coordInfo = _rgFlightPathCoordInfo[coordIndex];
+        bool isLastItem = (coordIndex == _rgFlightPathCoordInfo.count() - 1);
         switch (coordInfo.coordType) {
         case CoordTypeInterior:
         case CoordTypeInteriorTerrainAdded:
@@ -1283,6 +1303,8 @@ void TransectStyleComplexItem::_buildAndAppendMissionItems(QList<MissionItem*>& 
             }
             break;
         }
+
+        _appendComplexItemSpecificActions(items, missionItemParent, seqNum, mavFrame, coordInfo, isLastItem);
     }
 }
 

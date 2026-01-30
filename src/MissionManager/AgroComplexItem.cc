@@ -259,62 +259,40 @@ void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject*
     }
 }
 
-void AgroComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* missionItemParent)
+void AgroComplexItem::_appendComplexItemGlobalSettings(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum)
 {
-    if (_loadedMissionItems.count()) {
-        TransectStyleComplexItem::appendMissionItems(items, missionItemParent);
-        return;
-    }
+    if (_isExclusionZoneFact.rawValue().toBool()) return;
 
-    if (_isExclusionZoneFact.rawValue().toBool()) {
-        return;
-    }
-
-    int seqNum = _sequenceNumber;
-
+    // Скорость
     double speed = _vehicleSpeedFact.rawValue().toDouble();
     if (speed > 0) {
-        MissionItem* speedItem = new MissionItem(seqNum++,
-                                                 MAV_CMD_DO_CHANGE_SPEED,
-                                                 MAV_FRAME_MISSION,
-                                                 1,
-                                                 speed,
-                                                 -1, 0, 0, 0, 0,
-                                                 true,
-                                                 false,
-                                                 missionItemParent);
-        items.append(speedItem);
+        items.append(new MissionItem(seqNum++, MAV_CMD_DO_CHANGE_SPEED, MAV_FRAME_MISSION,
+                                     1, speed, -1, 0, 0, 0, 0, true, false, missionItemParent));
     }
 
-    MAV_FRAME mavFrame = MAV_FRAME_GLOBAL_RELATIVE_ALT;
-    _appendSprayerCommand(items, missionItemParent, seqNum, false);
-    if (_cameraCalc.distanceMode() == QGroundControlQmlGlobal::AltitudeModeAbsolute ||
-        _cameraCalc.distanceMode() == QGroundControlQmlGlobal::AltitudeModeCalcAboveTerrain) {
-        mavFrame = MAV_FRAME_GLOBAL;
-    } else if (_cameraCalc.distanceMode() == QGroundControlQmlGlobal::AltitudeModeTerrainFrame) {
-        mavFrame = MAV_FRAME_GLOBAL_TERRAIN_ALT;
-    }
-
-    for (int i = 0; i < _rgFlightPathCoordInfo.count(); i++) {
-        const CoordInfo_t& coordInfo = _rgFlightPathCoordInfo[i];
-
-        _appendWaypoint(items, missionItemParent, seqNum, mavFrame, 0, coordInfo.coord);
-
-        switch (coordInfo.coordType) {
-            case CoordTypeSurveyEntry:
-                _appendSprayerCommand(items, missionItemParent, seqNum, true);
-                break;
-
-            case CoordTypeSurveyExit:
-                _appendSprayerCommand(items, missionItemParent, seqNum, false);
-                break;
-
-            default:
-                break;
-        }
-    }
+    // ВКЛЮЧАЕМ ОПРЫСКИВАТЕЛЬ (один раз на всю миссию Agro)
+    _appendSprayerCommand(items, missionItemParent, seqNum, true);
 }
 
+// 2. Выключаем только в самом конце
+void AgroComplexItem::_appendComplexItemSpecificActions(
+    QList<MissionItem*>& items, 
+    QObject* missionItemParent, 
+    int& seqNum, 
+    MAV_FRAME mavFrame, 
+    const TransectStyleComplexItem::CoordInfo_t& coordInfo, 
+    bool isLastItem)
+{
+    Q_UNUSED(mavFrame);
+    Q_UNUSED(coordInfo);
+
+    if (_isExclusionZoneFact.rawValue().toBool()) return;
+
+    // Если это последняя точка всего маршрута
+    if (isLastItem) {
+        _appendSprayerCommand(items, missionItemParent, seqNum, false);
+    }
+}
 void AgroComplexItem::save(QJsonArray&  planItems)
 {
     QJsonObject saveObject;
@@ -1093,8 +1071,8 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
 
         if (bestPath.count() > 2) {
             for (int k = 1; k < bestPath.count() - 1; k++) {
-                _transects.append({{_toGeo(bestPath[k], origin), CoordTypeInteriorHoverTrigger},
-                                   {_toGeo(bestPath[k], origin), CoordTypeInteriorHoverTrigger}});
+                _transects.append({{_toGeo(bestPath[k], origin), CoordTypeInterior},
+                                   {_toGeo(bestPath[k], origin), CoordTypeInterior}});
             }
         }
 
