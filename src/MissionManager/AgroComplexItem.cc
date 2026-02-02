@@ -940,40 +940,39 @@ void AgroComplexItem::_intersectLinesWithPolygon(const QList<QLineF>& lineList, 
     resultLines.clear();
     if (allowedPolygons.isEmpty() || lineList.isEmpty()) return;
 
-    ClipperLib::Paths subjectPaths;
+    ClipperLib::Clipper clipper;
     for (const auto& poly : allowedPolygons) {
-        subjectPaths.push_back(_toClipperPath(poly));
+        clipper.AddPath(_toClipperPath(poly), ClipperLib::ptClip, true);
     }
-
-    // We use strictly the same scale as in _toClipperPath
-    const double scale = ClipperScale;
 
     for (const QLineF& line : lineList) {
         ClipperLib::Path linePath;
-        linePath.push_back(ClipperLib::IntPoint(static_cast<long long>(std::round(line.p1().x() * scale)),
-                                                static_cast<long long>(std::round(line.p1().y() * scale))));
-        linePath.push_back(ClipperLib::IntPoint(static_cast<long long>(std::round(line.p2().x() * scale)),
-                                                static_cast<long long>(std::round(line.p2().y() * scale))));
+        linePath.push_back(ClipperLib::IntPoint(
+            static_cast<ClipperLib::cInt>(std::round(line.p1().x() * ClipperScale)),
+            static_cast<ClipperLib::cInt>(std::round(line.p1().y() * ClipperScale))
+        ));
+        linePath.push_back(ClipperLib::IntPoint(
+            static_cast<ClipperLib::cInt>(std::round(line.p2().x() * ClipperScale)),
+            static_cast<ClipperLib::cInt>(std::round(line.p2().y() * ClipperScale))
+        ));
+        clipper.AddPath(linePath, ClipperLib::ptSubject, false);
+    }
 
-        ClipperLib::Clipper c;
-        c.AddPath(linePath, ClipperLib::ptSubject, false); // false = open path (line)
-        c.AddPaths(subjectPaths, ClipperLib::ptClip, true); // true = closed (polygon)
+    ClipperLib::PolyTree solutionTree;
+    clipper.Execute(ClipperLib::ctIntersection, solutionTree, ClipperLib::pftNonZero, ClipperLib::pftNonZero);
 
-        ClipperLib::PolyTree solutionTree;
-        // Using pftNonZero for more reliable clipping
-        c.Execute(ClipperLib::ctIntersection, solutionTree, ClipperLib::pftNonZero, ClipperLib::pftNonZero);
+    ClipperLib::Paths intersectedPaths;
+    ClipperLib::OpenPathsFromPolyTree(solutionTree, intersectedPaths);
 
-        ClipperLib::Paths intersectedPaths;
-        ClipperLib::OpenPathsFromPolyTree(solutionTree, intersectedPaths);
-
-        for (const auto& path : intersectedPaths) {
-            if (path.size() < 2) continue;
-            for (size_t i = 0; i < path.size() - 1; ++i) {
-                resultLines.append(QLineF(
-                    static_cast<double>(path[i].X) / scale, static_cast<double>(path[i].Y) / scale,
-                    static_cast<double>(path[i+1].X) / scale, static_cast<double>(path[i+1].Y) / scale
-                ));
-            }
+    for (const auto& path : intersectedPaths) {
+        if (path.size() < 2) continue;
+        for (size_t i = 0; i < path.size() - 1; ++i) {
+            resultLines.append(QLineF(
+                static_cast<double>(path[i].X) / ClipperScale,
+                static_cast<double>(path[i].Y) / ClipperScale,
+                static_cast<double>(path[i+1].X) / ClipperScale,
+                static_cast<double>(path[i+1].Y) / ClipperScale
+            ));
         }
     }
 }
@@ -1112,6 +1111,11 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
     }
 
     double gridAngle = _gridAngleFact.rawValue().toDouble();
+
+    if (qAbs(gridAngle) < 1.0) {
+        gridAngle = (gridAngle >= 0) ? 1.0 : -1.0;
+    }
+
     double gridSpacing = _cameraCalc.adjustedFootprintSide()->rawValue().toDouble();
     gridAngle = _clampGridAngle90(gridAngle + (refly ? 90.0 : 0.0));
 
@@ -1156,8 +1160,18 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
         QList<QPointF> bestPath;
 
         for (int i = 0; i < allSegments.count(); i++) {
+            double distP1 = QLineF(currentPos, allSegments[i].line.p1()).length();
+            double distP2 = QLineF(currentPos, allSegments[i].line.p2()).length();
+
+            if (distP1 > bestScore && distP2 > bestScore) {
+                continue;
+            }
+
             for (bool rev : {false, true}) {
                 QPointF testPt = rev ? allSegments[i].line.p2() : allSegments[i].line.p1();
+
+                double directDist = QLineF(currentPos, testPt).length();
+                if (directDist > bestScore) continue;
 
                 QList<QPointF> path = _findSafePath(currentPos, testPt, allowedPolygons, checkExclusionPolys);
 
@@ -1166,7 +1180,7 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
                     for (int k = 0; k < path.count() - 1; k++) pathLen += QLineF(path[k], path[k+1]).length();
 
                     int lineDiff = qAbs(allSegments[i].lineId - currentLineId);
-                    double score = pathLen + (lineDiff * 1000.0);
+                    double score = pathLen + (lineDiff * 2.0);
 
                     if (score < bestScore) {
                         bestScore = score;
@@ -1192,8 +1206,49 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
 
         GridSegment chosen = allSegments.takeAt(bestIdx);
         QLineF finalLine = reverse ? QLineF(chosen.line.p2(), chosen.line.p1()) : chosen.line;
-        _transects.append({{_toGeo(finalLine.p1(), origin), CoordTypeSurveyEntry},
-                           {_toGeo(finalLine.p2(), origin), CoordTypeSurveyExit}});
+
+        QList<TransectStyleComplexItem::CoordInfo_t> coordInfoTransect;
+
+        QPointF entryPt = finalLine.p1();
+        QPointF exitPt  = finalLine.p2();
+
+        auto getSafeExtension = [&](const QPointF& start, const QPointF& end, double distance) -> QPointF {
+            if (distance <= 0) return start;
+
+            QLineF line(end, start);
+            line.setLength(line.length() + distance);
+            QPointF target = line.p2();
+
+            if (_isPathClear(start, target, checkExclusionPolys)) {
+                return target;
+            } else {
+                return start;
+            }
+        };
+
+        if (_hasTurnaround()) {
+            QPointF turnaroundPt = getSafeExtension(entryPt, exitPt, _turnaroundDistance());
+            if (turnaroundPt != entryPt) {
+                QGeoCoordinate turnCoord = _toGeo(turnaroundPt, origin);
+                turnCoord.setAltitude(qQNaN());
+                coordInfoTransect.append({turnCoord, CoordTypeTurnaround});
+            }
+        }
+
+        coordInfoTransect.append({_toGeo(entryPt, origin), CoordTypeSurveyEntry});
+
+        coordInfoTransect.append({_toGeo(exitPt, origin), CoordTypeSurveyExit});
+
+        if (_hasTurnaround()) {
+            QPointF turnaroundPt = getSafeExtension(exitPt, entryPt, _turnaroundDistance());
+            if (turnaroundPt != exitPt) {
+                QGeoCoordinate turnCoord = _toGeo(turnaroundPt, origin);
+                turnCoord.setAltitude(qQNaN());
+                coordInfoTransect.append({turnCoord, CoordTypeTurnaround});
+            }
+        }
+
+        _transects.append(coordInfoTransect);
 
         currentPos = finalLine.p2();
         currentLineId = chosen.lineId;
@@ -1203,20 +1258,31 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
 bool AgroComplexItem::_isPathClear(const QPointF& start, const QPointF& end, const QList<QPolygonF>& checkExclusionPolys)
 {
     if (checkExclusionPolys.isEmpty()) return true;
+
     QLineF path(start, end);
     double len = path.length();
     if (len < 0.1) return true;
+
+    QRectF pathRect = QRectF(start, end).normalized();
 
     QPointF s = path.pointAt(qMin(0.02, len/2) / len);
     QPointF e = path.pointAt(1.0 - qMin(0.02, len/2) / len);
     QLineF test(s, e);
 
     for (const auto& poly : checkExclusionPolys) {
-        for (int i = 0; i < poly.count() - 1; i++) {
-            if (test.intersects(QLineF(poly[i], poly[i+1]), nullptr) == QLineF::BoundedIntersection) return false;
+        if (!pathRect.intersects(poly.boundingRect())) {
+            continue;
         }
-        if (poly.containsPoint(test.pointAt(0.5), Qt::WindingFill)) return false;
+
+        for (int i = 0; i < poly.count() - 1; i++) {
+            if (test.intersects(QLineF(poly[i], poly[i+1]), nullptr) == QLineF::BoundedIntersection)
+                return false;
+        }
+
+        if (poly.containsPoint(test.pointAt(0.5), Qt::WindingFill))
+            return false;
     }
+
     return true;
 }
 
@@ -1623,6 +1689,10 @@ bool AgroComplexItem::_appendBypassIfNecessary(const QGeoCoordinate& start,
 
 QList<QPointF> AgroComplexItem::_findSafePath(const QPointF& start, const QPointF& end, const QList<QPolygonF>& allowedPolygons, const QList<QPolygonF>& checkExclusionPolys)
 {
+    if (checkExclusionPolys.isEmpty()) {
+        return {start, end};
+    }
+
     if (_isPathClear(start, end, checkExclusionPolys)) {
         return {start, end};
     }
@@ -1656,13 +1726,14 @@ QList<QPointF> AgroComplexItem::_findSafePath(const QPointF& start, const QPoint
             break;
         }
         visited[u] = true;
-
         for (int v = 0; v < n; v++) {
             if (!visited[v]) {
-                double d = QLineF(nodes[u], nodes[v]).length();
-                if (d < 500.0 && _isPathClear(nodes[u], nodes[v], checkExclusionPolys)) {
-                    if (dist[u] + d < dist[v]) {
-                        dist[v] = dist[u] + d;
+                double edgeLen = QLineF(nodes[u], nodes[v]).length();
+                // edgeLen - variable for searching paths, larger value - better searches all paths, but takes longer
+
+                if (edgeLen < 5000.0 && _isPathClear(nodes[u], nodes[v], checkExclusionPolys)) {
+                    if (dist[u] + edgeLen < dist[v]) {
+                        dist[v] = dist[u] + edgeLen;
                         parent[v] = u;
                     }
                 }
@@ -1682,3 +1753,5 @@ QList<QPointF> AgroComplexItem::_findSafePath(const QPointF& start, const QPoint
     }
     return path;
 }
+
+
