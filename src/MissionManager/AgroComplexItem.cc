@@ -938,8 +938,49 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
 
         GridSegment chosen = allSegments.takeAt(bestIdx);
         QLineF finalLine = reverse ? QLineF(chosen.line.p2(), chosen.line.p1()) : chosen.line;
-        _transects.append({{_toGeo(finalLine.p1(), origin), CoordTypeSurveyEntry},
-                        {_toGeo(finalLine.p2(), origin), CoordTypeSurveyExit}});
+
+        QList<TransectStyleComplexItem::CoordInfo_t> coordInfoTransect;
+
+        QPointF entryPt = finalLine.p1();
+        QPointF exitPt  = finalLine.p2();
+
+        auto getSafeExtension = [&](const QPointF& start, const QPointF& end, double distance) -> QPointF {
+            if (distance <= 0) return start;
+
+            QLineF line(end, start);
+            line.setLength(line.length() + distance);
+            QPointF target = line.p2();
+
+            if (_isPathClear(start, target, checkExclusionPolys)) {
+                return target;
+            } else {
+                return start;
+            }
+        };
+
+        if (_hasTurnaround()) {
+            QPointF turnaroundPt = getSafeExtension(entryPt, exitPt, _turnaroundDistance());
+            if (turnaroundPt != entryPt) {
+                QGeoCoordinate turnCoord = _toGeo(turnaroundPt, origin);
+                turnCoord.setAltitude(qQNaN());
+                coordInfoTransect.append({turnCoord, CoordTypeTurnaround});
+            }
+        }
+
+        coordInfoTransect.append({_toGeo(entryPt, origin), CoordTypeSurveyEntry});
+
+        coordInfoTransect.append({_toGeo(exitPt, origin), CoordTypeSurveyExit});
+
+        if (_hasTurnaround()) {
+            QPointF turnaroundPt = getSafeExtension(exitPt, entryPt, _turnaroundDistance());
+            if (turnaroundPt != exitPt) {
+                QGeoCoordinate turnCoord = _toGeo(turnaroundPt, origin);
+                turnCoord.setAltitude(qQNaN());
+                coordInfoTransect.append({turnCoord, CoordTypeTurnaround});
+            }
+        }
+
+        _transects.append(coordInfoTransect);
 
         currentPos = finalLine.p2();
         currentLineId = chosen.lineId;
@@ -1444,3 +1485,5 @@ QList<QPointF> AgroComplexItem::_findSafePath(const QPointF& start, const QPoint
     }
     return path;
 }
+
+
