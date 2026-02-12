@@ -129,6 +129,7 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     connect(&_spinnerPWMFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_minPumpFact,              &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_vehicleSpeedFact,         &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
+    connect(&_swathWidthFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects); 
     connect(&_calcModeEnabledFact,      &Fact::valueChanged,                        this, &AgroComplexItem::_recalcSpeedFromRate);
     connect(&_targetRateFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_recalcSpeedFromRate);
     connect(&_flowRateMaxFact,          &Fact::valueChanged,                        this, &AgroComplexItem::_recalcSpeedFromRate);
@@ -1055,10 +1056,15 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
         _transects.clear();
     }
 
-    // Coordinates (NED)
+    double swathWidth = _swathWidthFact.rawValue().toDouble();
+    if (swathWidth < 0.1) swathWidth = 0.1;
+
+    double gridSpacing = swathWidth; 
+    
+    double sprayMargin = swathWidth / 2.0; 
+
     QGeoCoordinate origin = _surveyAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(0)->coordinate();
 
-    // Preparing the main training ground
     QPolygonF mainPolyNED;
     for (int i = 0; i < _surveyAreaPolygon.count(); i++) {
         double y, x, d;
@@ -1066,7 +1072,27 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
         mainPolyNED << QPointF(x, y);
     }
 
-    // We collect all the “red zones” in their original form
+    QList<QPolygonF> safeFlyingPolygons;
+    {
+        ClipperLib::ClipperOffset offsetter;
+        offsetter.MiterLimit = 2.0;
+
+        ClipperLib::Path path = _toClipperPath(mainPolyNED);
+
+        offsetter.AddPath(path, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
+
+        ClipperLib::Paths solution;
+        offsetter.Execute(solution, -sprayMargin * ClipperScale);
+
+        for (const auto& solPath : solution) {
+            safeFlyingPolygons.append(_fromClipperPath(solPath));
+        }
+    }
+
+    if (safeFlyingPolygons.isEmpty()) {
+        return;
+    }
+
     QList<QPolygonF> rawExclusionPolysNED;
     if (_masterController && _masterController->missionController()) {
         QmlObjectListModel* items = _masterController->missionController()->visualItems();
@@ -1084,19 +1110,18 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
         }
     }
 
-    // We inflate the restricted areas (for example, by 2 meters)
-    // In the future, 'margin' can be added to the interface settings
-    double genMargin = 1.0;
-    double checkMargin = 0.3;
+    double genMargin = sprayMargin; 
+    double checkMargin = 0.3; 
 
     QList<QPolygonF> checkExclusionPolys;
     _inflateExclusionZones(rawExclusionPolysNED, checkMargin, checkExclusionPolys);
 
-    // Subtract the BOLDED zones from the field
     ClipperLib::Clipper clipper;
-    ClipperLib::Path sPath = _toClipperPath(mainPolyNED);
-    if (!ClipperLib::Orientation(sPath)) ClipperLib::ReversePath(sPath);
-    clipper.AddPath(sPath, ClipperLib::ptSubject, true);
+    for (const auto& poly : safeFlyingPolygons) {
+        ClipperLib::Path sPath = _toClipperPath(poly);
+        if (!ClipperLib::Orientation(sPath)) ClipperLib::ReversePath(sPath);
+        clipper.AddPath(sPath, ClipperLib::ptSubject, true);
+    }
 
     QList<QPolygonF> genExclusionPolys;
     _inflateExclusionZones(rawExclusionPolysNED, genMargin, genExclusionPolys);
@@ -1116,7 +1141,6 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
         gridAngle = (gridAngle >= 0) ? 1.0 : -1.0;
     }
 
-    double gridSpacing = _cameraCalc.adjustedFootprintSide()->rawValue().toDouble();
     gridAngle = _clampGridAngle90(gridAngle + (refly ? 90.0 : 0.0));
 
     QRectF totalRect;
