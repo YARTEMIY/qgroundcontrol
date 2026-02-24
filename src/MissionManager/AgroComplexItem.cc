@@ -146,7 +146,19 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
         _surveyAreaPolygon.loadKMLOrSHPFile(kmlOrShpFile);
         _surveyAreaPolygon.setDirty(false);
     }
+
+    if (_masterController && _masterController->missionController()) {
+        QmlObjectListModel* visualItems = _masterController->missionController()->visualItems();
+        if (visualItems) {
+            connect(visualItems, &QmlObjectListModel::countChanged, this, [this](){
+                if (!this->isExclusionZone()->rawValue().toBool()) {
+                    this->_rebuildTransects();
+                }
+            }, Qt::QueuedConnection);
+        }
+    }
     setDirty(false);
+
 }
 
 void AgroComplexItem::_recalcSpeedFromRate(void)
@@ -1039,29 +1051,76 @@ void AgroComplexItem::_rebuildTransectsPhase1(void)
     if (_refly90DegreesFact.rawValue().toBool()) {
         _rebuildTransectsPhase1WorkerSinglePolygon(true /* refly */);
     }
+
+    if (_isExclusionZoneFact.rawValue().toBool()) {
+        _updateOtherAgroItems();
+    }
+}
+
+QList<QPolygonF> AgroComplexItem::_collectExclusionPolygonsNed(const QGeoCoordinate& origin)
+{
+    QList<QPolygonF> rawExclusionPolysNED;
+    if (!_masterController || !_masterController->missionController()) {
+        return rawExclusionPolysNED;
+    }
+
+    QmlObjectListModel* items = _masterController->missionController()->visualItems();
+    for (int i = 0; i < items->count(); i++) {
+        AgroComplexItem* agroItem = qobject_cast<AgroComplexItem*>(items->get(i));
+        if (agroItem && agroItem != this && agroItem->isExclusionZone()->rawValue().toBool()) {
+            QPolygonF exPoly;
+            for (int j = 0; j < agroItem->surveyAreaPolygon()->count(); j++) {
+                double y, x, d;
+                QGCGeo::convertGeoToNed(agroItem->surveyAreaPolygon()->vertexCoordinate(j), origin, y, x, d);
+                exPoly << QPointF(x, y);
+            }
+            if (exPoly.count() >= 3) rawExclusionPolysNED.append(exPoly);
+        }
+    }
+    return rawExclusionPolysNED;
+}
+
+QList<AgroComplexItem::GridSegment> AgroComplexItem::_generateGridSegments(const QList<QPolygonF>& allowedPolygons, double gridAngle, double gridSpacing)
+{
+    QList<GridSegment> allSegments;
+    QRectF totalRect;
+    for (const auto& p : allowedPolygons) totalRect |= p.boundingRect();
+    if (totalRect.isEmpty()) return allSegments;
+
+    double maxDim = qMax(totalRect.width(), totalRect.height()) * 1.5;
+    QPointF center = totalRect.center();
+    int lId = 0;
+
+    for (double x = -maxDim; x < maxDim; x += gridSpacing) {
+        QPointF p1 = _rotatePoint(QPointF(center.x() + x, center.y() - maxDim), center, gridAngle);
+        QPointF p2 = _rotatePoint(QPointF(center.x() + x, center.y() + maxDim), center, gridAngle);
+
+        QList<QLineF> intersections;
+        _intersectLinesWithPolygon({QLineF(p1, p2)}, allowedPolygons, intersections);
+
+        std::sort(intersections.begin(), intersections.end(), [&](const QLineF& a, const QLineF& b) {
+            return QLineF(p1, a.p1()).length() < QLineF(p1, b.p1()).length();
+        });
+
+        for (const auto& s : intersections) allSegments.append({s, lId});
+        lId++;
+    }
+    return allSegments;
 }
 
 void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
 {
-    if (_ignoreGlobalUpdate || _ignoreRecalc || _surveyAreaPolygon.count() < 3) {
-        return;
-    }
+    if (_ignoreRecalc || _surveyAreaPolygon.count() < 3) return;
 
     if (_isExclusionZoneFact.rawValue().toBool()) {
         _transects.clear();
         return;
     }
 
-    if (!refly) {
-        _transects.clear();
-    }
+    if (!refly) _transects.clear();
 
     double swathWidth = _swathWidthFact.rawValue().toDouble();
     if (swathWidth < 0.1) swathWidth = 0.1;
-
-    double gridSpacing = swathWidth; 
-    
-    double sprayMargin = swathWidth / 2.0; 
 
     QGeoCoordinate origin = _surveyAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(0)->coordinate();
 
@@ -1072,109 +1131,34 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
         mainPolyNED << QPointF(x, y);
     }
 
-    QList<QPolygonF> safeFlyingPolygons;
-    {
-        ClipperLib::ClipperOffset offsetter;
-        offsetter.MiterLimit = 2.0;
-
-        ClipperLib::Path path = _toClipperPath(mainPolyNED);
-
-        offsetter.AddPath(path, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
-
-        ClipperLib::Paths solution;
-        offsetter.Execute(solution, -sprayMargin * ClipperScale);
-
-        for (const auto& solPath : solution) {
-            safeFlyingPolygons.append(_fromClipperPath(solPath));
-        }
-    }
-
-    if (safeFlyingPolygons.isEmpty()) {
-        return;
-    }
-
-    QList<QPolygonF> rawExclusionPolysNED;
-    if (_masterController && _masterController->missionController()) {
-        QmlObjectListModel* items = _masterController->missionController()->visualItems();
-        for (int i = 0; i < items->count(); i++) {
-            AgroComplexItem* agroItem = qobject_cast<AgroComplexItem*>(items->get(i));
-            if (agroItem && agroItem != this && agroItem->isExclusionZone()->rawValue().toBool()) {
-                QPolygonF exPoly;
-                for (int j = 0; j < agroItem->surveyAreaPolygon()->count(); j++) {
-                    double y, x, d;
-                    QGCGeo::convertGeoToNed(agroItem->surveyAreaPolygon()->vertexCoordinate(j), origin, y, x, d);
-                    exPoly << QPointF(x, y);
-                }
-                if (exPoly.count() >= 3) rawExclusionPolysNED.append(exPoly);
-            }
-        }
-    }
-
-    double genMargin = sprayMargin; 
-    double checkMargin = 0.3; 
+    QList<QPolygonF> rawExclusionPolys = _collectExclusionPolygonsNed(origin);
+    
+    QList<QPolygonF> allowedPolygons = _calculateAllowedPolygons(mainPolyNED, rawExclusionPolys);
 
     QList<QPolygonF> checkExclusionPolys;
-    _inflateExclusionZones(rawExclusionPolysNED, checkMargin, checkExclusionPolys);
+    _inflateExclusionZones(rawExclusionPolys, 0.3 /* checkMargin */, checkExclusionPolys);
 
-    ClipperLib::Clipper clipper;
-    for (const auto& poly : safeFlyingPolygons) {
-        ClipperLib::Path sPath = _toClipperPath(poly);
-        if (!ClipperLib::Orientation(sPath)) ClipperLib::ReversePath(sPath);
-        clipper.AddPath(sPath, ClipperLib::ptSubject, true);
-    }
+    double gridSpacing = swathWidth; 
+    
+    double gridAngle = _clampGridAngle90(_gridAngleFact.rawValue().toDouble() + (refly ? 90.0 : 0.0));
+    if (qAbs(gridAngle) < 1.0) gridAngle = (gridAngle >= 0) ? 1.0 : -1.0;
 
-    QList<QPolygonF> genExclusionPolys;
-    _inflateExclusionZones(rawExclusionPolysNED, genMargin, genExclusionPolys);
-    for (const auto& p : genExclusionPolys) clipper.AddPath(_toClipperPath(p), ClipperLib::ptClip, true);
-
-    ClipperLib::Paths solution;
-    clipper.Execute(ClipperLib::ctDifference, solution, ClipperLib::pftEvenOdd, ClipperLib::pftEvenOdd);
-    QList<QPolygonF> allowedPolygons;
-    for (const auto& path : solution) {
-        QPolygonF p = _fromClipperPath(path);
-        if (p.count() >= 3) allowedPolygons << p;
-    }
-
-    double gridAngle = _gridAngleFact.rawValue().toDouble();
-
-    if (qAbs(gridAngle) < 1.0) {
-        gridAngle = (gridAngle >= 0) ? 1.0 : -1.0;
-    }
-
-    gridAngle = _clampGridAngle90(gridAngle + (refly ? 90.0 : 0.0));
-
-    QRectF totalRect;
-    for (const auto& p : allowedPolygons) totalRect |= p.boundingRect();
-
-    struct GridSegment { QLineF line; int lineId; };
-    QList<GridSegment> allSegments;
-    double maxDim = qMax(totalRect.width(), totalRect.height()) * 1.5;
-    QPointF center = totalRect.center();
-    int lId = 0;
-    for (double x = -maxDim; x < maxDim; x += gridSpacing) {
-        QPointF p1 = _rotatePoint(QPointF(center.x() + x, center.y() - maxDim), center, gridAngle);
-        QPointF p2 = _rotatePoint(QPointF(center.x() + x, center.y() + maxDim), center, gridAngle);
-        QList<QLineF> intersections;
-        _intersectLinesWithPolygon({QLineF(p1, p2)}, allowedPolygons, intersections);
-        std::sort(intersections.begin(), intersections.end(), [&](const QLineF& a, const QLineF& b) {
-            return QLineF(p1, a.p1()).length() < QLineF(p1, b.p1()).length();
-        });
-        for (const auto& s : intersections) allSegments.append({s, lId});
-        lId++;
-    }
-
-    if (allSegments.isEmpty()) {
-        return;
-    }
+    QList<GridSegment> allSegments = _generateGridSegments(allowedPolygons, gridAngle, gridSpacing);
+    if (allSegments.isEmpty()) return;
 
     double minX = 1e10;
     for (const auto& s : allSegments) minX = qMin(minX, qMin(s.line.p1().x(), s.line.p2().x()));
+
     QPointF currentPos;
     double minY = 1e10;
     int currentLineId = -1;
     for (const auto& s : allSegments) {
-        if (qAbs(s.line.p1().x() - minX) < 0.1 && s.line.p1().y() < minY) { minY = s.line.p1().y(); currentPos = s.line.p1(); }
-        if (qAbs(s.line.p2().x() - minX) < 0.1 && s.line.p2().y() < minY) { minY = s.line.p2().y(); currentPos = s.line.p2(); }
+        if (qAbs(s.line.p1().x() - minX) < 0.1 && s.line.p1().y() < minY) {
+            minY = s.line.p1().y(); currentPos = s.line.p1();
+        }
+        if (qAbs(s.line.p2().x() - minX) < 0.1 && s.line.p2().y() < minY) {
+            minY = s.line.p2().y(); currentPos = s.line.p2();
+        }
     }
 
     while (!allSegments.isEmpty()) {
@@ -1184,42 +1168,23 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
         QList<QPointF> bestPath;
 
         for (int i = 0; i < allSegments.count(); i++) {
-            double distP1 = QLineF(currentPos, allSegments[i].line.p1()).length();
-            double distP2 = QLineF(currentPos, allSegments[i].line.p2()).length();
-
-            if (distP1 > bestScore && distP2 > bestScore) {
-                continue;
-            }
-
             for (bool rev : {false, true}) {
                 QPointF testPt = rev ? allSegments[i].line.p2() : allSegments[i].line.p1();
-
-                double directDist = QLineF(currentPos, testPt).length();
-                if (directDist > bestScore) continue;
-
                 QList<QPointF> path = _findSafePath(currentPos, testPt, allowedPolygons, checkExclusionPolys);
 
                 if (!path.isEmpty()) {
                     double pathLen = 0;
                     for (int k = 0; k < path.count() - 1; k++) pathLen += QLineF(path[k], path[k+1]).length();
 
-                    int lineDiff = qAbs(allSegments[i].lineId - currentLineId);
-                    double score = pathLen + (lineDiff * 2.0);
-
+                    double score = pathLen + (qAbs(allSegments[i].lineId - currentLineId) * 2.0);
                     if (score < bestScore) {
-                        bestScore = score;
-                        bestIdx = i;
-                        reverse = rev;
-                        bestPath = path;
+                        bestScore = score; bestIdx = i; reverse = rev; bestPath = path;
                     }
                 }
             }
         }
 
-        if (bestIdx == -1) {
-            qWarning() << "No reachable path found to any segment. Stopping.";
-            break;
-        }
+        if (bestIdx == -1) break;
 
         if (bestPath.count() > 2) {
             for (int k = 1; k < bestPath.count() - 1; k++) {
@@ -1233,50 +1198,72 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
 
         QList<TransectStyleComplexItem::CoordInfo_t> coordInfoTransect;
 
-        QPointF entryPt = finalLine.p1();
-        QPointF exitPt  = finalLine.p2();
-
-        auto getSafeExtension = [&](const QPointF& start, const QPointF& end, double distance) -> QPointF {
-            if (distance <= 0) return start;
-
-            QLineF line(end, start);
-            line.setLength(line.length() + distance);
-            QPointF target = line.p2();
-
-            if (_isPathClear(start, target, checkExclusionPolys)) {
-                return target;
-            } else {
-                return start;
-            }
+        auto getSafeExt = [&](const QPointF& s, const QPointF& e, double dist) {
+            if (dist <= 0) return s;
+            QLineF l(e, s); l.setLength(l.length() + dist);
+            return _isPathClear(s, l.p2(), checkExclusionPolys) ? l.p2() : s;
         };
 
         if (_hasTurnaround()) {
-            QPointF turnaroundPt = getSafeExtension(entryPt, exitPt, _turnaroundDistance());
-            if (turnaroundPt != entryPt) {
-                QGeoCoordinate turnCoord = _toGeo(turnaroundPt, origin);
-                turnCoord.setAltitude(qQNaN());
-                coordInfoTransect.append({turnCoord, CoordTypeTurnaround});
-            }
+            coordInfoTransect.append({_toGeo(getSafeExt(finalLine.p1(), finalLine.p2(), _turnaroundDistance()), origin), CoordTypeTurnaround});
         }
 
-        coordInfoTransect.append({_toGeo(entryPt, origin), CoordTypeSurveyEntry});
-
-        coordInfoTransect.append({_toGeo(exitPt, origin), CoordTypeSurveyExit});
+        coordInfoTransect.append({_toGeo(finalLine.p1(), origin), CoordTypeSurveyEntry});
+        coordInfoTransect.append({_toGeo(finalLine.p2(), origin), CoordTypeSurveyExit});
 
         if (_hasTurnaround()) {
-            QPointF turnaroundPt = getSafeExtension(exitPt, entryPt, _turnaroundDistance());
-            if (turnaroundPt != exitPt) {
-                QGeoCoordinate turnCoord = _toGeo(turnaroundPt, origin);
-                turnCoord.setAltitude(qQNaN());
-                coordInfoTransect.append({turnCoord, CoordTypeTurnaround});
-            }
+            coordInfoTransect.append({_toGeo(getSafeExt(finalLine.p2(), finalLine.p1(), _turnaroundDistance()), origin), CoordTypeTurnaround});
         }
 
         _transects.append(coordInfoTransect);
-
         currentPos = finalLine.p2();
         currentLineId = chosen.lineId;
     }
+}
+
+QList<QPolygonF> AgroComplexItem::_calculateAllowedPolygons(const QPolygonF& mainPoly, const QList<QPolygonF>& rawExclusionPolys)
+{
+    double swathWidth = _swathWidthFact.rawValue().toDouble();
+    if (swathWidth < 0.1) swathWidth = 0.1;
+    
+    double sprayMargin = swathWidth / 2.0;
+
+    ClipperLib::Clipper clipper;
+
+    {
+        ClipperLib::ClipperOffset offsetter;
+        offsetter.MiterLimit = 2.0;
+
+        ClipperLib::Path path = _toClipperPath(mainPoly);
+        offsetter.AddPath(path, ClipperLib::jtMiter, ClipperLib::etClosedPolygon);
+
+        ClipperLib::Paths solution;
+        offsetter.Execute(solution, -sprayMargin * ClipperScale);
+
+        for (const auto& solPath : solution) {
+            ClipperLib::Path sPath = solPath;
+            if (!ClipperLib::Orientation(sPath)) ClipperLib::ReversePath(sPath);
+            clipper.AddPath(sPath, ClipperLib::ptSubject, true);
+        }
+    }
+
+    QList<QPolygonF> genExclusionPolys;
+    _inflateExclusionZones(rawExclusionPolys, sprayMargin, genExclusionPolys);
+    
+    for (const auto& p : genExclusionPolys) {
+        clipper.AddPath(_toClipperPath(p), ClipperLib::ptClip, true);
+    }
+
+    ClipperLib::Paths solution;
+    clipper.Execute(ClipperLib::ctDifference, solution, ClipperLib::pftEvenOdd, ClipperLib::pftEvenOdd);
+
+    QList<QPolygonF> allowedPolygons;
+    for (const auto& path : solution) {
+        QPolygonF p = _fromClipperPath(path);
+        if (p.count() >= 3) allowedPolygons << p;
+    }
+
+    return allowedPolygons;
 }
 
 bool AgroComplexItem::_isPathClear(const QPointF& start, const QPointF& end, const QList<QPolygonF>& checkExclusionPolys)
@@ -1605,21 +1592,21 @@ void AgroComplexItem::_updateOtherAgroItems()
         return;
     }
 
-    // If we are not the controller or there is no list of items, exit
     if (!_masterController || !_masterController->missionController()) {
         return;
     }
 
-    // Set a lock flag to prevent falling into an infinite recursion
-    _ignoreGlobalUpdate = true;
+   _ignoreGlobalUpdate = true;
 
     QmlObjectListModel* items = _masterController->missionController()->visualItems();
+
     for (int i = 0; i < items->count(); i++) {
-        AgroComplexItem* agroItem = qobject_cast<AgroComplexItem*>(items->get(i));
-        // If this is another AgroItem (not ourselves) and it is NOT an exclusion zone (i.e. it's a field that needs to be recalculated)
-        if (agroItem && agroItem != this && !agroItem->isExclusionZone()->rawValue().toBool()) {
-            // Force a recalculation
-            agroItem->_rebuildTransects();
+        AgroComplexItem* otherItem = qobject_cast<AgroComplexItem*>(items->get(i));
+
+        if (otherItem && otherItem != this) {
+            if (!otherItem->isExclusionZone()->rawValue().toBool()) {
+                otherItem->_rebuildTransects();
+            }
         }
     }
 
@@ -1778,4 +1765,19 @@ QList<QPointF> AgroComplexItem::_findSafePath(const QPointF& start, const QPoint
     return path;
 }
 
+QRectF AgroComplexItem::_getPolygonBoundingRect(const QGCMapPolygon& polygon) const {
+    if (polygon.count() < 3) return QRectF();
 
+    double minLat = 90.0, maxLat = -90.0;
+    double minLon = 180.0, maxLon = -180.0;
+
+    for (int i = 0; i < polygon.count(); i++) {
+        QGeoCoordinate coord = polygon.vertexCoordinate(i);
+        if (coord.latitude() < minLat) minLat = coord.latitude();
+        if (coord.latitude() > maxLat) maxLat = coord.latitude();
+        if (coord.longitude() < minLon) minLon = coord.longitude();
+        if (coord.longitude() > maxLon) maxLon = coord.longitude();
+    }
+
+    return QRectF(minLon, minLat, maxLon - minLon, maxLat - minLat);
+}

@@ -213,6 +213,12 @@ private:
     static constexpr double _clipperScale = 10000.0;
     QGeoCoordinate _toGeo(const QPointF& pt, const QGeoCoordinate& origin);
     QList<QPointF> _findSafePath(const QPointF& start, const QPointF& end, const QList<QPolygonF>& allowedPolygons, const QList<QPolygonF>& checkExclusionPolys);
+
+    QRectF _getPolygonBoundingRect(const QGCMapPolygon& polygon) const;
+    QList<QPolygonF> _collectExclusionPolygonsNed(const QGeoCoordinate& origin);
+    QList<QPolygonF> _calculateAllowedPolygons(const QPolygonF& mainPoly, const QList<QPolygonF>& rawExclusionPolys);
+    struct GridSegment { QLineF line; int lineId; };
+    QList<GridSegment> _generateGridSegments(const QList<QPolygonF>& allowedPolygons, double gridAngle, double gridSpacing);
 #if 0
     // Splitting polygons is not supported since this code would get stuck in a infinite loop
     // Code is left here in case someone wants to try to resurrect it
