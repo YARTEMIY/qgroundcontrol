@@ -1,13 +1,3 @@
-/****************************************************************************
- *
- * (c) 2009-2024 QGROUNDCONTROL PROJECT <http://www.qgroundcontrol.org>
- *
- * QGroundControl is licensed according to the terms in the file
- * COPYING.md in the root of the source code directory.
- *
- ****************************************************************************/
-
-
 #include "AgroComplexItem.h"
 #include "JsonHelper.h"
 #include "QGCGeo.h"
@@ -29,6 +19,7 @@
 #include <algorithm>
 
 #include "clipper.hpp"
+
 bool AgroComplexItem::_ignoreGlobalUpdate = false;
 
 QGC_LOGGING_CATEGORY(AgroComplexItemLog, "Plan.AgroComplexItem")
@@ -157,6 +148,7 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
             }, Qt::QueuedConnection);
         }
     }
+
     setDirty(false);
 
 }
@@ -167,24 +159,24 @@ void AgroComplexItem::_recalcSpeedFromRate(void)
         return;
     }
 
-    double q = _flowRateMaxFact.rawValue().toDouble(); // L/min
-    double R = _targetRateFact.rawValue().toDouble();  // L/ha
-    double s = _swathWidthFact.rawValue().toDouble();  // m
+    double lowRateMax = _flowRateMaxFact.rawValue().toDouble(); // L/min
+    double targetRate = _targetRateFact.rawValue().toDouble();  // L/ha
+    double swathWidth = _swathWidthFact.rawValue().toDouble();  // m
 
-    if (R <= 0 || s <= 0) {
+    if (targetRate <= 0 || swathWidth <= 0) {
         return;
     }
 
-    double v_ms = (q * 600.0) / (R * s) / 3.6;
+    double velocityMS = (lowRateMax * 600.0) / (targetRate * swathWidth) / 3.6;
 
-    if (v_ms < 0.5) {
-        v_ms = 0.5;
+    if (velocityMS < 0.5) {
+        velocityMS = 0.5;
     }
-    if (v_ms > 20.0) {
-        v_ms = 20.0;
+    if (velocityMS > 20.0) {
+        velocityMS = 20.0;
     }
 
-    _vehicleSpeedFact.setRawValue(v_ms);
+    _vehicleSpeedFact.setRawValue(velocityMS);
 }
 
 void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool active)
@@ -272,78 +264,91 @@ void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject*
     }
 }
 
-struct Vec2 { double x; double y; };
+struct Vector2D { double x; double y; };
 
-bool AgroComplexItem::_isPathRedundant(const QGeoCoordinate& p1, const QGeoCoordinate& p2) const
+bool AgroComplexItem::_isPathRedundant(const QGeoCoordinate& pointFirst, const QGeoCoordinate& pointSecond) const
 {
-    for (const auto& seg : _sprayedHistory) {
-        if (_checkLineOverlap(p1, p2, seg.p1, seg.p2)) {
+    for (const auto& segment : _sprayedHistory) {
+        if (_checkLineOverlap(pointFirst, pointSecond, segment.pointFirst, segment.pointSecond)) {
             return true;
         }
     }
     return false;
 }
 
-bool AgroComplexItem::_checkLineOverlap(const QGeoCoordinate& currStart, const QGeoCoordinate& currEnd,
-                                        const QGeoCoordinate& histStart, const QGeoCoordinate& histEnd) const
+bool AgroComplexItem::_checkLineOverlap(const QGeoCoordinate& currentStart, const QGeoCoordinate& currentEnd,
+                                        const QGeoCoordinate& historyStart, const QGeoCoordinate& historyEnd) const
 {
-    double y, x, d;
+    double nedNorth, nedEast, nedDown;
     
-    QGCGeo::convertGeoToNed(currEnd, currStart, y, x, d);
-    Vec2 V = {x, y};
+    // Obtain the vector of the current path in meters (relative to the beginning of the current path)
+    QGCGeo::convertGeoToNed(currentEnd, currentStart, nedNorth, nedEast, nedDown);
+    Vector2D currentPathVector = {nedEast, nedNorth};
 
-    QGCGeo::convertGeoToNed(histStart, currStart, y, x, d);
-    Vec2 H1 = {x, y};
+    // Obtain the coordinates of the historical segment relative to the beginning of the current path
+    QGCGeo::convertGeoToNed(historyStart, currentStart, nedNorth, nedEast, nedDown);
+    Vector2D historyStartRelative = {nedEast, nedNorth};
 
-    QGCGeo::convertGeoToNed(histEnd, currStart, y, x, d);
-    Vec2 H2 = {x, y};
+    QGCGeo::convertGeoToNed(historyEnd, currentStart, nedNorth, nedEast, nedDown);
+    Vector2D historyEndRelative = {nedEast, nedNorth};
 
-    double lenSq = (V.x * V.x) + (V.y * V.y);
-    if (lenSq < 0.01) return false;
-    double len = sqrt(lenSq);
+    // Calculate the length of the current path
+    double currentPathLengthSq = (currentPathVector.x * currentPathVector.x) + (currentPathVector.y * currentPathVector.y);
+    if (currentPathLengthSq < 0.01) return false;
+    double currentPathLength = sqrt(currentPathLengthSq);
 
-    Vec2 V_norm = {V.x / len, V.y / len};
-    Vec2 H_vec = {H2.x - H1.x, H2.y - H1.y};
-    double h_len = sqrt(H_vec.x * H_vec.x + H_vec.y * H_vec.y);
-    if (h_len < 0.01) return false;
+    // Check the parallelism of paths using the scalar product
+    Vector2D currentPathDirection = {currentPathVector.x / currentPathLength, currentPathVector.y / currentPathLength};
+    Vector2D historySegmentVector = {historyEndRelative.x - historyStartRelative.x, historyEndRelative.y - historyStartRelative.y};
     
-    double dot = (V_norm.x * (H_vec.x / h_len)) + (V_norm.y * (H_vec.y / h_len));
+    double historySegmentLength = sqrt(historySegmentVector.x * historySegmentVector.x + historySegmentVector.y * historySegmentVector.y);
+    if (historySegmentLength < 0.01) return false;
     
-    if (std::abs(dot) < 0.9) return false;
+    double alignmentDotProduct = (currentPathDirection.x * (historySegmentVector.x / historySegmentLength)) + 
+                                 (currentPathDirection.y * (historySegmentVector.y / historySegmentLength));
+    
+    // If the lines are not parallel (the angle is too big), there is no overlap.
+    if (std::abs(alignmentDotProduct) < 0.9) return false;
 
-    auto distToLine = [&](Vec2 P) {
-        return std::abs(P.x * V.y - P.y * V.x) / len;
+    // Lambda for calculating the lateral distance from a point to the current path line
+    auto calculateLateralDistance = [&](Vector2D point) {
+        return std::abs(point.x * currentPathVector.y - point.y * currentPathVector.x) / currentPathLength;
     };
 
-    double lateralDist1 = distToLine(H1);
-    double lateralDist2 = distToLine(H2);
+    double lateralDistanceStart = calculateLateralDistance(historyStartRelative);
+    double lateralDistanceEnd   = calculateLateralDistance(historyEndRelative);
 
-    const double lateralTolerance = 1.0; 
+    const double lateralToleranceMeters = 1.0; 
 
-    if (lateralDist1 > lateralTolerance && lateralDist2 > lateralTolerance) {
+    // If both points of the historical segment are too far to the side, there is no overlap
+    if (lateralDistanceStart > lateralToleranceMeters && lateralDistanceEnd > lateralToleranceMeters) {
         return false;
     }
 
-    auto getT = [&](Vec2 P) {
-        return (P.x * V.x + P.y * V.y) / lenSq;
+    // Lambda for finding the projection of a point onto the current path vector (coefficient T from 0 to 1)
+    auto calculateProjectionT = [&](Vector2D point) {
+        return (point.x * currentPathVector.x + point.y * currentPathVector.y) / currentPathLengthSq;
     };
 
-    double t1 = getT(H1);
-    double t2 = getT(H2);
+    double historyStartT = calculateProjectionT(historyStartRelative);
+    double historyEndT   = calculateProjectionT(historyEndRelative);
 
-    double minT = std::min(t1, t2);
-    double maxT = std::max(t1, t2);
+    double historyMinT = std::min(historyStartT, historyEndT);
+    double historyMaxT = std::max(historyStartT, historyEndT);
 
-    double overlapStart = std::max(0.0, minT);
-    double overlapEnd   = std::min(1.0, maxT);
+    // We find the boundaries of the intersection of segments (in the range 0.0 ... 1.0 of the current path)
+    double overlapStartT = std::max(0.0, historyMinT);
+    double overlapEndT   = std::min(1.0, historyMaxT);
 
-    if (overlapStart >= overlapEnd) {
+    if (overlapStartT >= overlapEndT) {
         return false;
     }
 
-    double overlapLen = (overlapEnd - overlapStart) * len;
+    // Calculate the physical length of the ceiling in meters
+    double overlapLengthMeters = (overlapEndT - overlapStartT) * currentPathLength;
 
-    if (overlapLen > 1.0) {
+    // If the overlap length is more than 1 meter, we consider the path redundant
+    if (overlapLengthMeters > 1.0) {
         return true;
     }
 
@@ -1162,24 +1167,51 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
     }
 
     while (!allSegments.isEmpty()) {
+        struct Candidate {
+            int index;
+            bool reverse;
+            double heuristicScore;
+            QPointF targetPt;
+        };
+        QList<Candidate> candidates;
+
+        for (int i = 0; i < allSegments.count(); i++) {
+            for (bool rev : {false, true}) {
+                QPointF testPt = rev ? allSegments[i].line.p2() : allSegments[i].line.p1();
+                double straightDist = QLineF(currentPos, testPt).length();
+                double penalty = qAbs(allSegments[i].lineId - currentLineId) * 2.0;
+                candidates.append({i, rev, straightDist + penalty, testPt});
+            }
+        }
+
+        std::sort(candidates.begin(), candidates.end(),[](const Candidate& a, const Candidate& b) {
+            return a.heuristicScore < b.heuristicScore;
+        });
+
         int bestIdx = -1;
         bool reverse = false;
         double bestScore = 1e18;
         QList<QPointF> bestPath;
 
-        for (int i = 0; i < allSegments.count(); i++) {
-            for (bool rev : {false, true}) {
-                QPointF testPt = rev ? allSegments[i].line.p2() : allSegments[i].line.p1();
-                QList<QPointF> path = _findSafePath(currentPos, testPt, allowedPolygons, checkExclusionPolys);
+        for (const auto& cand : candidates) {
+            if (cand.heuristicScore > bestScore) {
+                break; 
+            }
 
-                if (!path.isEmpty()) {
-                    double pathLen = 0;
-                    for (int k = 0; k < path.count() - 1; k++) pathLen += QLineF(path[k], path[k+1]).length();
+            QList<QPointF> path = _findSafePath(currentPos, cand.targetPt, allowedPolygons, checkExclusionPolys);
 
-                    double score = pathLen + (qAbs(allSegments[i].lineId - currentLineId) * 2.0);
-                    if (score < bestScore) {
-                        bestScore = score; bestIdx = i; reverse = rev; bestPath = path;
-                    }
+            if (!path.isEmpty()) {
+                double pathLen = 0;
+                for (int k = 0; k < path.count() - 1; k++) {
+                    pathLen += QLineF(path[k], path[k+1]).length();
+                }
+
+                double finalScore = pathLen + (qAbs(allSegments[cand.index].lineId - currentLineId) * 2.0);
+                if (finalScore < bestScore) {
+                    bestScore = finalScore;
+                    bestIdx = cand.index;
+                    reverse = cand.reverse;
+                    bestPath = path;
                 }
             }
         }

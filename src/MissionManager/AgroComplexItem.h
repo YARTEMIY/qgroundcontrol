@@ -146,8 +146,8 @@ protected:
 
 private:
     struct SprayedSegment {
-        QGeoCoordinate p1;
-        QGeoCoordinate p2;
+        QGeoCoordinate pointFirst;
+        QGeoCoordinate pointSecond;
     };
     int _actionIteratorIndex = 0;
     bool _simulatedSprayerState = false;
