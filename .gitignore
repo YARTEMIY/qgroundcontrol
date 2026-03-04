@@ -26,16 +26,9 @@ tags
 # ------------------------------------------------------------------------------
 # Build System & CMake
 # ------------------------------------------------------------------------------
-<<<<<<< HEAD
-build/
-build_agro/
-build_master/
-
-=======
 build*/
 !.github/actions/build-setup/
 !.github/actions/build-setup/action.yml
->>>>>>> master
 cmake-build-*/
 out/
 CMakeFiles
