@@ -75,7 +75,7 @@ ColumnLayout {
         QGCCheckBox {
             text: qsTr("Repeat")
             checked: joystick.getButtonRepeat(buttonAssignmentRow.selectedButtonIndex)
-            enabled: joystick.assignableActions.get(buttonActionCombo.currentIndex).canRepeat
+            enabled: buttonActionCombo.currentIndex === -1 ? false : (joystick.assignableActions.get(buttonActionCombo.currentIndex) ? joystick.assignableActions.get(buttonActionCombo.currentIndex).canRepeat : false)
 
             onClicked: {
                 joystick.setButtonRepeat(buttonAssignmentRow.selectedButtonIndex, checked)
