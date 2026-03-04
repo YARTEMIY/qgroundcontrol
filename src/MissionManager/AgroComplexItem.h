@@ -139,6 +139,7 @@ private slots:
     void _recalcCameraShots             (void) final;
 
     void _recalcSpeedFromRate           (void);
+    void _queueRebuildTransects();
 
 protected:
     void _appendComplexItemGlobalSettings(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum) final;
@@ -152,6 +153,7 @@ private:
     int _actionIteratorIndex = 0;
     bool _simulatedSprayerState = false;
     QList<SprayedSegment> _sprayedHistory;
+    QTimer _recalcTimer;
 
     bool _isPathRedundant(const QGeoCoordinate& p1, const QGeoCoordinate& p2) const;
     bool _checkLineOverlap(const QGeoCoordinate& currStart, const QGeoCoordinate& currEnd,

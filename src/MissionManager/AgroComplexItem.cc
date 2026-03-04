@@ -89,6 +89,10 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
         _cameraCalc.distanceToSurface()->setRawValue(SettingsManager::instance()->appSettings()->defaultMissionItemAltitude()->rawValue());
     }
 
+    _recalcTimer.setSingleShot(true);
+    _recalcTimer.setInterval(200);
+    connect(&_recalcTimer,              &QTimer::timeout,                           this, &AgroComplexItem::_rebuildTransects);
+
     connect(&_gridAngleFact,            &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_flyAlternateTransectsFact,&Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_splitConcavePolygonsFact, &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
@@ -106,7 +110,7 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     connect(&_flowRateMaxFact,          &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_swathWidthFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_isExclusionZoneFact,      &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
-    connect(this,                       &AgroComplexItem::refly90DegreesChanged,  this, &AgroComplexItem::_setDirty);
+    connect(this,                       &AgroComplexItem::refly90DegreesChanged,    this, &AgroComplexItem::_setDirty);
 
     connect(&_gridAngleFact,            &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_flyAlternateTransectsFact,&Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
@@ -126,12 +130,13 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     connect(&_flowRateMaxFact,          &Fact::valueChanged,                        this, &AgroComplexItem::_recalcSpeedFromRate);
     connect(&_swathWidthFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_recalcSpeedFromRate);
     connect(&_isExclusionZoneFact,      &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
-    connect(this,                       &AgroComplexItem::refly90DegreesChanged,  this, &AgroComplexItem::_rebuildTransects);
+    connect(this,                       &AgroComplexItem::refly90DegreesChanged,    this, &AgroComplexItem::_rebuildTransects);
 
     connect(&_surveyAreaPolygon,        &QGCMapPolygon::isValidChanged,             this, &AgroComplexItem::_updateWizardMode);
     connect(&_surveyAreaPolygon,        &QGCMapPolygon::traceModeChanged,           this, &AgroComplexItem::_updateWizardMode);
 
-    connect(&_surveyAreaPolygon,        &QGCMapPolygon::pathChanged,                this, &AgroComplexItem::_rebuildTransects);
+    // disconnect(&_surveyAreaPolygon, &QGCMapPolygon::pathChanged, this, &AgroComplexItem::_rebuildTransects); // Doubtful
+    connect(&_surveyAreaPolygon,        &QGCMapPolygon::pathChanged,                this, &AgroComplexItem::_queueRebuildTransects);
 
     if (!kmlOrShpFile.isEmpty()) {
         _surveyAreaPolygon.loadKMLOrSHPFile(kmlOrShpFile);
@@ -151,6 +156,11 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
 
     setDirty(false);
 
+}
+
+void AgroComplexItem::_queueRebuildTransects()
+{
+    _recalcTimer.start(); 
 }
 
 void AgroComplexItem::_recalcSpeedFromRate(void)
@@ -1628,7 +1638,7 @@ void AgroComplexItem::_updateOtherAgroItems()
         return;
     }
 
-   _ignoreGlobalUpdate = true;
+    _ignoreGlobalUpdate = true;
 
     QmlObjectListModel* items = _masterController->missionController()->visualItems();
 
@@ -1637,7 +1647,7 @@ void AgroComplexItem::_updateOtherAgroItems()
 
         if (otherItem && otherItem != this) {
             if (!otherItem->isExclusionZone()->rawValue().toBool()) {
-                otherItem->_rebuildTransects();
+                otherItem->_queueRebuildTransects(); 
             }
         }
     }
