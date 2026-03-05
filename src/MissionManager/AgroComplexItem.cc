@@ -418,6 +418,10 @@ void AgroComplexItem::_appendComplexItemSpecificActions(
 
     bool isDuplicate = _isPathRedundant(currentPoint, nextPoint);
 
+    if (_actionIteratorIndex < 3 || _actionIteratorIndex > (_rgFlightPathCoordInfo.count() - 5)) {
+        isDuplicate = false; 
+    }
+
     if (isDuplicate) {
         if (_simulatedSprayerState) {
             _appendSprayerCommand(items, missionItemParent, seqNum, false);
@@ -443,12 +447,12 @@ void AgroComplexItem::save(QJsonArray&  planItems)
     planItems.append(saveObject);
 }
 
-void AgroComplexItem::savePreset(const QString& name)
+void AgroComplexItem::savePreset(const QString& presetName)
 {
     QJsonObject saveObject;
 
     _saveCommon(saveObject);
-    _savePresetJson(name, saveObject);
+    _savePresetJson(presetName, saveObject);
 }
 
 void AgroComplexItem::_saveCommon(QJsonObject& saveObject)
@@ -483,13 +487,13 @@ void AgroComplexItem::_saveCommon(QJsonObject& saveObject)
     _surveyAreaPolygon.saveToJson(saveObject);
 }
 
-void AgroComplexItem::loadPreset(const QString& name)
+void AgroComplexItem::loadPreset(const QString& presetName)
 {
     QString errorString;
 
-    QJsonObject presetObject = _loadPresetJson(name);
+    QJsonObject presetObject = _loadPresetJson(presetName);
     if (!_loadV4V5(presetObject, 0, errorString, 5, true /* forPresets */)) {
-        qgcApp()->showAppMessage(QStringLiteral("Internal Error: Preset load failed. Name: %1 Error: %2").arg(name).arg(errorString));
+        qgcApp()->showAppMessage(QStringLiteral("Internal Error: Preset load failed. Name: %1 Error: %2").arg(presetName).arg(errorString));
     }
     _rebuildTransects();
 }
@@ -1491,8 +1495,8 @@ void AgroComplexItem::_rebuildTransectsFromPolygon(bool refly, const QPolygonF& 
                 qCDebug(AgroComplexItemLog) << "cInnerHoverPoints" << cInnerHoverPoints;
                 for (int i=0; i<cInnerHoverPoints; i++) {
                     QGeoCoordinate hoverCoord = transect[0].atDistanceAndAzimuth(triggerDistance() * (i + 1), transectAzimuth);
-                    TransectStyleComplexItem::CoordInfo_t coordInfo = { hoverCoord, CoordTypeInteriorHoverTrigger };
-                    coordInfoTransect.insert(1 + i, coordInfo);
+                    TransectStyleComplexItem::CoordInfo_t hoverCoordInfo = { hoverCoord, CoordTypeInteriorHoverTrigger };
+                    coordInfoTransect.insert(1 + i, hoverCoordInfo);
                 }
             }
         }
@@ -1505,8 +1509,8 @@ void AgroComplexItem::_rebuildTransectsFromPolygon(bool refly, const QPolygonF& 
             double azimuth = transect[0].azimuthTo(transect[1]);
             turnaroundCoord = transect[0].atDistanceAndAzimuth(-turnAroundDistance, azimuth);
             turnaroundCoord.setAltitude(qQNaN());
-            TransectStyleComplexItem::CoordInfo_t coordInfo = { turnaroundCoord, CoordTypeTurnaround };
-            coordInfoTransect.prepend(coordInfo);
+            TransectStyleComplexItem::CoordInfo_t turnaroundCoordInfo = { turnaroundCoord, CoordTypeTurnaround };
+            coordInfoTransect.prepend(turnaroundCoordInfo);
 
             azimuth = transect.last().azimuthTo(transect[transect.count() - 2]);
             turnaroundCoord = transect.last().atDistanceAndAzimuth(-turnAroundDistance, azimuth);

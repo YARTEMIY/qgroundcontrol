@@ -310,6 +310,11 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     src/Clipper/cpp
 )
 
+set_source_files_properties(src/Clipper/cpp/clipper.cpp PROPERTIES 
+    COMPILE_FLAGS "-w -Wno-error"
+    SKIP_PRECOMPILE_HEADERS TRUE
+)
+
 # ----------------------------------------------------------------------------
 # Source & Test Subdirectories
 # ----------------------------------------------------------------------------
