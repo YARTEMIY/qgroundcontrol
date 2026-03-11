@@ -4468,26 +4468,6 @@ void Vehicle::motorInterlock(bool enable)
     }
 }
 
-void Vehicle::toggleSprayer()
-{
-
-    _sprayerActive = !_sprayerActive;
-
-    float turnOn = 1.0f;
-    float turnOff = -1.0f;
-
-    float actuatorValue = _sprayerActive ? turnOn : turnOff;
-
-    sendMavCommand(
-        defaultComponentId(),
-        MAV_CMD_DO_SET_ACTUATOR,
-        true,
-        qQNaN(),
-        actuatorValue, qQNaN(), qQNaN(), qQNaN(), qQNaN(), 0.0f
-    );
-     _say(QString("Sprayer %1").arg(_sprayerActive ? "On" : "Off"));
-}
-
 /*---------------------------------------------------------------------------*/
 /*===========================================================================*/
 /*                         Status Text Handler                               */

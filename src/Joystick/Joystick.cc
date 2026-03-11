@@ -1082,7 +1082,6 @@ void Joystick::_startPollingForVehicle(Vehicle &vehicle)
     (void) connect(this, &Joystick::landingGearDeploy,  _pollingVehicle, &Vehicle::landingGearDeploy);
     (void) connect(this, &Joystick::landingGearRetract, _pollingVehicle, &Vehicle::landingGearRetract);
     (void) connect(this, &Joystick::motorInterlock,     _pollingVehicle, &Vehicle::motorInterlock);
-    (void) connect(this, &Joystick::toggleSprayer,      _pollingVehicle, &Vehicle::toggleSprayer);
 
     (void) connect(_pollingVehicle, &Vehicle::flightModesChanged, this, &Joystick::_flightModesChanged);
 
@@ -1467,8 +1466,6 @@ void Joystick::_executeButtonAction(const QString &action, const ButtonEvent_t b
         { _buttonActionLandingGearRetract,      ButtonEventDownTransition,  [this]() { emit landingGearRetract(); } },
         { _buttonActionMotorInterlockEnable,    ButtonEventDownTransition,  [this]() { emit motorInterlock(true); } },
         { _buttonActionMotorInterlockDisable,   ButtonEventDownTransition,  [this]() { emit motorInterlock(false); } },
-        { _buttonActionToggleSprayer,           ButtonEventDownTransition,  [this]() { emit toggleSprayer(); } },
-        { _buttonActionToggleSprayer,           ButtonEventUpTransition,    [this]() { emit toggleSprayer(); } },
     });
 
     // First check for flight mode match
@@ -1582,8 +1579,6 @@ void Joystick::_buildAvailableButtonsActionList(Vehicle *vehicle)
     _availableButtonActions->append(new AvailableButtonAction(_buttonActionMotorInterlockEnable, false));
     _availableButtonActions->append(new AvailableButtonAction(_buttonActionMotorInterlockDisable, false));
 #endif
-
-    _availableButtonActions->append(new AvailableButtonAction(_buttonActionToggleSprayer, false));
 
     const auto customActions = QGCCorePlugin::instance()->joystickActions();
     for (const auto &action : customActions) {

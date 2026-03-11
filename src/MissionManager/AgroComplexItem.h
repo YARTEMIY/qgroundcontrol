@@ -152,7 +152,6 @@ private:
     };
     int _actionIteratorIndex = 0;
     bool _simulatedSprayerState = false;
-    QList<SprayedSegment> _sprayedHistory;
     QTimer _recalcTimer;
 
     bool _isPathRedundant(const QGeoCoordinate& p1, const QGeoCoordinate& p2) const;

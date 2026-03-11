@@ -45,7 +45,9 @@ QPolygonF AgroComplexItem::_fromClipperPath(const ClipperLib::Path& path) const 
         poly << QPointF(static_cast<double>(pt.X) / ClipperScale,
                         static_cast<double>(pt.Y) / ClipperScale);
     }
-    if (!poly.isEmpty() && poly.first() != poly.last()) poly << poly.first();
+    if (!poly.isEmpty() && poly.first() != poly.last()) {
+        poly << poly.first();
+    }
     return poly;
 }
 
@@ -238,14 +240,26 @@ void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject*
         };
 
         if (pumpId > 0) {
-            items.append(new MissionItem(seqNum++, MAV_CMD_DO_SET_SERVO, MAV_FRAME_MISSION,
-                                         (double)pumpId, valueToPWM(pumpValue),
-                                         0, 0, 0, 0, 0, true, false, missionItemParent));
+            items.append(new MissionItem(seqNum++,
+                                         MAV_CMD_DO_SET_SERVO,
+                                         MAV_FRAME_MISSION,
+                                         (double)pumpId,
+                                         valueToPWM(pumpValue),
+                                         0, 0, 0, 0, 0,
+                                         true,
+                                         false,
+                                         missionItemParent));
         }
         if (spinnerId > 0) {
-            items.append(new MissionItem(seqNum++, MAV_CMD_DO_SET_SERVO, MAV_FRAME_MISSION,
-                                         (double)spinnerId, valueToPWM(spinnerValue),
-                                         0, 0, 0, 0, 0, true, false, missionItemParent));
+            items.append(new MissionItem(seqNum++,
+                                         MAV_CMD_DO_SET_SERVO,
+                                         MAV_FRAME_MISSION,
+                                         (double)spinnerId,
+                                         valueToPWM(spinnerValue),
+                                         0, 0, 0, 0, 0,
+                                         true,
+                                         false,
+                                         missionItemParent));
         }
 
     } else if (firmwareType == MAV_AUTOPILOT_PX4){
@@ -274,117 +288,27 @@ void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject*
     }
 }
 
-struct Vector2D { double x; double y; };
-
-// TODO: saving spray fluid
-// bool AgroComplexItem::_isPathRedundant(const QGeoCoordinate& pointFirst, const QGeoCoordinate& pointSecond) const
-// {
-//     for (const auto& segment : _sprayedHistory) {
-//         if (_checkLineOverlap(pointFirst, pointSecond, segment.pointFirst, segment.pointSecond)) {
-//             return true;
-//         }
-//     }
-//     return false;
-// }
-
-// bool AgroComplexItem::_checkLineOverlap(const QGeoCoordinate& currentStart, const QGeoCoordinate& currentEnd,
-//                                         const QGeoCoordinate& historyStart, const QGeoCoordinate& historyEnd) const
-// {
-//     double nedNorth, nedEast, nedDown;
-    
-//     // Obtain the vector of the current path in meters (relative to the beginning of the current path)
-//     QGCGeo::convertGeoToNed(currentEnd, currentStart, nedNorth, nedEast, nedDown);
-//     Vector2D currentPathVector = {nedEast, nedNorth};
-
-//     // Obtain the coordinates of the historical segment relative to the beginning of the current path
-//     QGCGeo::convertGeoToNed(historyStart, currentStart, nedNorth, nedEast, nedDown);
-//     Vector2D historyStartRelative = {nedEast, nedNorth};
-
-//     QGCGeo::convertGeoToNed(historyEnd, currentStart, nedNorth, nedEast, nedDown);
-//     Vector2D historyEndRelative = {nedEast, nedNorth};
-
-//     // Calculate the length of the current path
-//     double currentPathLengthSq = (currentPathVector.x * currentPathVector.x) + (currentPathVector.y * currentPathVector.y);
-//     if (currentPathLengthSq < 0.01) return false;
-//     double currentPathLength = sqrt(currentPathLengthSq);
-
-//     // Check the parallelism of paths using the scalar product
-//     Vector2D currentPathDirection = {currentPathVector.x / currentPathLength, currentPathVector.y / currentPathLength};
-//     Vector2D historySegmentVector = {historyEndRelative.x - historyStartRelative.x, historyEndRelative.y - historyStartRelative.y};
-    
-//     double historySegmentLength = sqrt(historySegmentVector.x * historySegmentVector.x + historySegmentVector.y * historySegmentVector.y);
-//     if (historySegmentLength < 0.01) return false;
-    
-//     double alignmentDotProduct = (currentPathDirection.x * (historySegmentVector.x / historySegmentLength)) + 
-//                                  (currentPathDirection.y * (historySegmentVector.y / historySegmentLength));
-    
-//     // If the lines are not parallel (the angle is too big), there is no overlap.
-//     if (std::abs(alignmentDotProduct) < 0.9) return false;
-
-//     // Lambda for calculating the lateral distance from a point to the current path line
-//     auto calculateLateralDistance = [&](Vector2D point) {
-//         return std::abs(point.x * currentPathVector.y - point.y * currentPathVector.x) / currentPathLength;
-//     };
-
-//     double lateralDistanceStart = calculateLateralDistance(historyStartRelative);
-//     double lateralDistanceEnd   = calculateLateralDistance(historyEndRelative);
-
-//     const double lateralToleranceMeters = 1.0; 
-
-//     // If both points of the historical segment are too far to the side, there is no overlap
-//     if (lateralDistanceStart > lateralToleranceMeters && lateralDistanceEnd > lateralToleranceMeters) {
-//         return false;
-//     }
-
-//     // Lambda for finding the projection of a point onto the current path vector (coefficient T from 0 to 1)
-//     auto calculateProjectionT = [&](Vector2D point) {
-//         return (point.x * currentPathVector.x + point.y * currentPathVector.y) / currentPathLengthSq;
-//     };
-
-//     double historyStartT = calculateProjectionT(historyStartRelative);
-//     double historyEndT   = calculateProjectionT(historyEndRelative);
-
-//     double historyMinT = std::min(historyStartT, historyEndT);
-//     double historyMaxT = std::max(historyStartT, historyEndT);
-
-//     // We find the boundaries of the intersection of segments (in the range 0.0 ... 1.0 of the current path)
-//     double overlapStartT = std::max(0.0, historyMinT);
-//     double overlapEndT   = std::min(1.0, historyMaxT);
-
-//     if (overlapStartT >= overlapEndT) {
-//         return false;
-//     }
-
-//     // Calculate the physical length of the ceiling in meters
-//     double overlapLengthMeters = (overlapEndT - overlapStartT) * currentPathLength;
-
-//     // If the overlap length is more than 1 meter, we consider the path redundant
-//     if (overlapLengthMeters > 1.0) {
-//         return true;
-//     }
-
-//     return false;
-// }
-
 void AgroComplexItem::_appendComplexItemGlobalSettings(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum)
 {
     if (_isExclusionZoneFact.rawValue().toBool()) {
         return;
     }
 
-    _actionIteratorIndex = 0;
-    _sprayedHistory.clear();
     _simulatedSprayerState = false;
 
     double speed = _vehicleSpeedFact.rawValue().toDouble();
     if (speed > 0) {
-        items.append(new MissionItem(seqNum++, MAV_CMD_DO_CHANGE_SPEED, MAV_FRAME_MISSION,
-                                     1, speed, -1, 0, 0, 0, 0, true, false, missionItemParent));
+        items.append(new MissionItem(seqNum++,
+                                     MAV_CMD_DO_CHANGE_SPEED,
+                                     MAV_FRAME_MISSION,
+                                     1,
+                                     speed,
+                                     -1,
+                                     0, 0, 0, 0,
+                                     true,
+                                     false,
+                                     missionItemParent));
     }
-
-    // TODO: saving spray fluid
-    // _appendSprayerCommand(items, missionItemParent, seqNum, true);
-    // _simulatedSprayerState = true;
 }
 
 void AgroComplexItem::_appendComplexItemSpecificActions(
@@ -414,28 +338,6 @@ void AgroComplexItem::_appendComplexItemSpecificActions(
         _appendSprayerCommand(items, missionItemParent, seqNum, true);
         _simulatedSprayerState = true;
     }
-
-    // QGeoCoordinate currentPoint = _rgFlightPathCoordInfo[_actionIteratorIndex].coord;
-    
-    // QGeoCoordinate nextPoint = _rgFlightPathCoordInfo[_actionIteratorIndex + 1].coord;
-
-    // bool isDuplicate = _isPathRedundant(currentPoint, nextPoint);
-
-    // if (isDuplicate) {
-    //     if (_simulatedSprayerState) {
-    //         _appendSprayerCommand(items, missionItemParent, seqNum, false);
-    //         _simulatedSprayerState = false;
-    //     }
-    // } else {
-    //     if (!_simulatedSprayerState) {
-    //         _appendSprayerCommand(items, missionItemParent, seqNum, true);
-    //         _simulatedSprayerState = true;
-    //     }
-        
-    //     _sprayedHistory.append({currentPoint, nextPoint});
-    // }
-
-    // _actionIteratorIndex++;
 }
 
 void AgroComplexItem::save(QJsonArray&  planItems)
@@ -969,7 +871,9 @@ void AgroComplexItem::_intersectLinesWithRect(const QList<QLineF>& lineList, con
 void AgroComplexItem::_intersectLinesWithPolygon(const QList<QLineF>& lineList, const QList<QPolygonF>& allowedPolygons, QList<QLineF>& resultLines)
 {
     resultLines.clear();
-    if (allowedPolygons.isEmpty() || lineList.isEmpty()) return;
+    if (allowedPolygons.isEmpty() || lineList.isEmpty()) {
+        return;
+    }
 
     ClipperLib::Clipper clipper;
     for (const auto& poly : allowedPolygons) {
@@ -996,7 +900,9 @@ void AgroComplexItem::_intersectLinesWithPolygon(const QList<QLineF>& lineList, 
     ClipperLib::OpenPathsFromPolyTree(solutionTree, intersectedPaths);
 
     for (const auto& path : intersectedPaths) {
-        if (path.size() < 2) continue;
+        if (path.size() < 2) {
+            continue;
+        }
         for (size_t i = 0; i < path.size() - 1; ++i) {
             resultLines.append(QLineF(
                 static_cast<double>(path[i].X) / ClipperScale,
@@ -1092,7 +998,9 @@ QList<QPolygonF> AgroComplexItem::_collectExclusionPolygonsNed(const QGeoCoordin
                 QGCGeo::convertGeoToNed(agroItem->surveyAreaPolygon()->vertexCoordinate(j), origin, y, x, d);
                 exPoly << QPointF(x, y);
             }
-            if (exPoly.count() >= 3) rawExclusionPolysNED.append(exPoly);
+            if (exPoly.count() >= 3) {
+                rawExclusionPolysNED.append(exPoly);
+            }
         }
     }
     return rawExclusionPolysNED;
@@ -1102,8 +1010,12 @@ QList<AgroComplexItem::GridSegment> AgroComplexItem::_generateGridSegments(const
 {
     QList<GridSegment> allSegments;
     QRectF totalRect;
-    for (const auto& p : allowedPolygons) totalRect |= p.boundingRect();
-    if (totalRect.isEmpty()) return allSegments;
+    for (const auto& p : allowedPolygons) {
+        totalRect |= p.boundingRect();
+    }
+    if (totalRect.isEmpty()) {
+        return allSegments;
+    }
 
     double maxDim = qMax(totalRect.width(), totalRect.height()) * 1.5;
     QPointF center = totalRect.center();
@@ -1120,7 +1032,9 @@ QList<AgroComplexItem::GridSegment> AgroComplexItem::_generateGridSegments(const
             return QLineF(p1, a.p1()).length() < QLineF(p1, b.p1()).length();
         });
 
-        for (const auto& s : intersections) allSegments.append({s, lId});
+        for (const auto& s : intersections) {
+            allSegments.append({s, lId});
+        }
         lId++;
     }
     return allSegments;
@@ -1128,17 +1042,23 @@ QList<AgroComplexItem::GridSegment> AgroComplexItem::_generateGridSegments(const
 
 void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
 {
-    if (_ignoreRecalc || _surveyAreaPolygon.count() < 3) return;
+    if (_ignoreRecalc || _surveyAreaPolygon.count() < 3) {
+        return;
+    }
 
     if (_isExclusionZoneFact.rawValue().toBool()) {
         _transects.clear();
         return;
     }
 
-    if (!refly) _transects.clear();
+    if (!refly) {
+        _transects.clear();
+    }
 
     double swathWidth = _swathWidthFact.rawValue().toDouble();
-    if (swathWidth < 0.1) swathWidth = 0.1;
+    if (swathWidth < 0.1) {
+        swathWidth = 0.1;
+    }
 
     QGeoCoordinate origin = _surveyAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(0)->coordinate();
 
@@ -1159,13 +1079,19 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
     double gridSpacing = swathWidth; 
     
     double gridAngle = _clampGridAngle90(_gridAngleFact.rawValue().toDouble() + (refly ? 90.0 : 0.0));
-    if (qAbs(gridAngle) < 1.0) gridAngle = (gridAngle >= 0) ? 1.0 : -1.0;
+    if (qAbs(gridAngle) < 1.0) {
+        gridAngle = (gridAngle >= 0) ? 1.0 : -1.0;
+    }
 
     QList<GridSegment> allSegments = _generateGridSegments(allowedPolygons, gridAngle, gridSpacing);
-    if (allSegments.isEmpty()) return;
+    if (allSegments.isEmpty()) {
+        return;
+    }
 
     double minX = 1e10;
-    for (const auto& s : allSegments) minX = qMin(minX, qMin(s.line.p1().x(), s.line.p2().x()));
+    for (const auto& s : allSegments) {
+        minX = qMin(minX, qMin(s.line.p1().x(), s.line.p2().x()));
+    }
 
     QPointF currentPos;
     double minY = 1e10;
@@ -1229,7 +1155,9 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
             }
         }
 
-        if (bestIdx == -1) break;
+        if (bestIdx == -1) {
+            break;
+        }
 
         if (bestPath.count() > 2) {
             for (int k = 1; k < bestPath.count() - 1; k++) {
@@ -1244,8 +1172,11 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
         QList<TransectStyleComplexItem::CoordInfo_t> coordInfoTransect;
 
         auto getSafeExt = [&](const QPointF& s, const QPointF& e, double dist) {
-            if (dist <= 0) return s;
-            QLineF l(e, s); l.setLength(l.length() + dist);
+            if (dist <= 0) {
+                return s;
+            }
+            QLineF l(e, s); 
+            l.setLength(l.length() + dist);
             return _isPathClear(s, l.p2(), checkExclusionPolys) ? l.p2() : s;
         };
 
@@ -1269,7 +1200,9 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
 QList<QPolygonF> AgroComplexItem::_calculateAllowedPolygons(const QPolygonF& mainPoly, const QList<QPolygonF>& rawExclusionPolys)
 {
     double swathWidth = _swathWidthFact.rawValue().toDouble();
-    if (swathWidth < 0.1) swathWidth = 0.1;
+    if (swathWidth < 0.1) {
+        swathWidth = 0.1;
+    }
     
     double sprayMargin = swathWidth / 2.0;
 
@@ -1305,7 +1238,9 @@ QList<QPolygonF> AgroComplexItem::_calculateAllowedPolygons(const QPolygonF& mai
     QList<QPolygonF> allowedPolygons;
     for (const auto& path : solution) {
         QPolygonF p = _fromClipperPath(path);
-        if (p.count() >= 3) allowedPolygons << p;
+        if (p.count() >= 3) {
+            allowedPolygons << p;
+        }
     }
 
     return allowedPolygons;
@@ -1317,7 +1252,9 @@ bool AgroComplexItem::_isPathClear(const QPointF& start, const QPointF& end, con
 
     QLineF path(start, end);
     double len = path.length();
-    if (len < 0.1) return true;
+    if (len < 0.1) {
+        return true;
+    }
 
     QRectF pathRect = QRectF(start, end).normalized();
 
@@ -1622,7 +1559,9 @@ QList<QLineF> AgroComplexItem::_subtractPolygonFromLine(const QLineF& line, cons
 
     QList<QLineF> segments;
     for (const auto& path : intPaths) {
-        if (path.size() < 2) continue;
+        if (path.size() < 2) {
+            continue;
+        }
         segments.append(QLineF(
             (double)path[0].X / ClipperScale, (double)path[0].Y / ClipperScale,
             (double)path[path.size()-1].X / ClipperScale, (double)path[path.size()-1].Y / ClipperScale
@@ -1757,7 +1696,9 @@ QList<QPointF> AgroComplexItem::_findSafePath(const QPointF& start, const QPoint
     nodes << start << end;
     for (const auto& poly : allowedPolygons) {
         for (const auto& pt : poly) {
-            if (!nodes.contains(pt)) nodes << pt;
+            if (!nodes.contains(pt)) {
+                nodes << pt;
+            }
         }
     }
 
@@ -1818,10 +1759,18 @@ QRectF AgroComplexItem::_getPolygonBoundingRect(const QGCMapPolygon& polygon) co
 
     for (int i = 0; i < polygon.count(); i++) {
         QGeoCoordinate coord = polygon.vertexCoordinate(i);
-        if (coord.latitude() < minLat) minLat = coord.latitude();
-        if (coord.latitude() > maxLat) maxLat = coord.latitude();
-        if (coord.longitude() < minLon) minLon = coord.longitude();
-        if (coord.longitude() > maxLon) maxLon = coord.longitude();
+        if (coord.latitude() < minLat) {
+            minLat = coord.latitude();
+        }
+        if (coord.latitude() > maxLat) {
+            maxLat = coord.latitude();
+        }
+        if (coord.longitude() < minLon) {
+            minLon = coord.longitude();
+        }
+        if (coord.longitude() > maxLon) {
+            maxLon = coord.longitude();
+        }
     }
 
     return QRectF(minLon, minLat, maxLon - minLon, maxLat - minLat);
