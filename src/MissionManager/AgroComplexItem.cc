@@ -276,94 +276,95 @@ void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject*
 
 struct Vector2D { double x; double y; };
 
-bool AgroComplexItem::_isPathRedundant(const QGeoCoordinate& pointFirst, const QGeoCoordinate& pointSecond) const
-{
-    for (const auto& segment : _sprayedHistory) {
-        if (_checkLineOverlap(pointFirst, pointSecond, segment.pointFirst, segment.pointSecond)) {
-            return true;
-        }
-    }
-    return false;
-}
+// TODO: saving spray fluid
+// bool AgroComplexItem::_isPathRedundant(const QGeoCoordinate& pointFirst, const QGeoCoordinate& pointSecond) const
+// {
+//     for (const auto& segment : _sprayedHistory) {
+//         if (_checkLineOverlap(pointFirst, pointSecond, segment.pointFirst, segment.pointSecond)) {
+//             return true;
+//         }
+//     }
+//     return false;
+// }
 
-bool AgroComplexItem::_checkLineOverlap(const QGeoCoordinate& currentStart, const QGeoCoordinate& currentEnd,
-                                        const QGeoCoordinate& historyStart, const QGeoCoordinate& historyEnd) const
-{
-    double nedNorth, nedEast, nedDown;
+// bool AgroComplexItem::_checkLineOverlap(const QGeoCoordinate& currentStart, const QGeoCoordinate& currentEnd,
+//                                         const QGeoCoordinate& historyStart, const QGeoCoordinate& historyEnd) const
+// {
+//     double nedNorth, nedEast, nedDown;
     
-    // Obtain the vector of the current path in meters (relative to the beginning of the current path)
-    QGCGeo::convertGeoToNed(currentEnd, currentStart, nedNorth, nedEast, nedDown);
-    Vector2D currentPathVector = {nedEast, nedNorth};
+//     // Obtain the vector of the current path in meters (relative to the beginning of the current path)
+//     QGCGeo::convertGeoToNed(currentEnd, currentStart, nedNorth, nedEast, nedDown);
+//     Vector2D currentPathVector = {nedEast, nedNorth};
 
-    // Obtain the coordinates of the historical segment relative to the beginning of the current path
-    QGCGeo::convertGeoToNed(historyStart, currentStart, nedNorth, nedEast, nedDown);
-    Vector2D historyStartRelative = {nedEast, nedNorth};
+//     // Obtain the coordinates of the historical segment relative to the beginning of the current path
+//     QGCGeo::convertGeoToNed(historyStart, currentStart, nedNorth, nedEast, nedDown);
+//     Vector2D historyStartRelative = {nedEast, nedNorth};
 
-    QGCGeo::convertGeoToNed(historyEnd, currentStart, nedNorth, nedEast, nedDown);
-    Vector2D historyEndRelative = {nedEast, nedNorth};
+//     QGCGeo::convertGeoToNed(historyEnd, currentStart, nedNorth, nedEast, nedDown);
+//     Vector2D historyEndRelative = {nedEast, nedNorth};
 
-    // Calculate the length of the current path
-    double currentPathLengthSq = (currentPathVector.x * currentPathVector.x) + (currentPathVector.y * currentPathVector.y);
-    if (currentPathLengthSq < 0.01) return false;
-    double currentPathLength = sqrt(currentPathLengthSq);
+//     // Calculate the length of the current path
+//     double currentPathLengthSq = (currentPathVector.x * currentPathVector.x) + (currentPathVector.y * currentPathVector.y);
+//     if (currentPathLengthSq < 0.01) return false;
+//     double currentPathLength = sqrt(currentPathLengthSq);
 
-    // Check the parallelism of paths using the scalar product
-    Vector2D currentPathDirection = {currentPathVector.x / currentPathLength, currentPathVector.y / currentPathLength};
-    Vector2D historySegmentVector = {historyEndRelative.x - historyStartRelative.x, historyEndRelative.y - historyStartRelative.y};
+//     // Check the parallelism of paths using the scalar product
+//     Vector2D currentPathDirection = {currentPathVector.x / currentPathLength, currentPathVector.y / currentPathLength};
+//     Vector2D historySegmentVector = {historyEndRelative.x - historyStartRelative.x, historyEndRelative.y - historyStartRelative.y};
     
-    double historySegmentLength = sqrt(historySegmentVector.x * historySegmentVector.x + historySegmentVector.y * historySegmentVector.y);
-    if (historySegmentLength < 0.01) return false;
+//     double historySegmentLength = sqrt(historySegmentVector.x * historySegmentVector.x + historySegmentVector.y * historySegmentVector.y);
+//     if (historySegmentLength < 0.01) return false;
     
-    double alignmentDotProduct = (currentPathDirection.x * (historySegmentVector.x / historySegmentLength)) + 
-                                 (currentPathDirection.y * (historySegmentVector.y / historySegmentLength));
+//     double alignmentDotProduct = (currentPathDirection.x * (historySegmentVector.x / historySegmentLength)) + 
+//                                  (currentPathDirection.y * (historySegmentVector.y / historySegmentLength));
     
-    // If the lines are not parallel (the angle is too big), there is no overlap.
-    if (std::abs(alignmentDotProduct) < 0.9) return false;
+//     // If the lines are not parallel (the angle is too big), there is no overlap.
+//     if (std::abs(alignmentDotProduct) < 0.9) return false;
 
-    // Lambda for calculating the lateral distance from a point to the current path line
-    auto calculateLateralDistance = [&](Vector2D point) {
-        return std::abs(point.x * currentPathVector.y - point.y * currentPathVector.x) / currentPathLength;
-    };
+//     // Lambda for calculating the lateral distance from a point to the current path line
+//     auto calculateLateralDistance = [&](Vector2D point) {
+//         return std::abs(point.x * currentPathVector.y - point.y * currentPathVector.x) / currentPathLength;
+//     };
 
-    double lateralDistanceStart = calculateLateralDistance(historyStartRelative);
-    double lateralDistanceEnd   = calculateLateralDistance(historyEndRelative);
+//     double lateralDistanceStart = calculateLateralDistance(historyStartRelative);
+//     double lateralDistanceEnd   = calculateLateralDistance(historyEndRelative);
 
-    const double lateralToleranceMeters = 1.0; 
+//     const double lateralToleranceMeters = 1.0; 
 
-    // If both points of the historical segment are too far to the side, there is no overlap
-    if (lateralDistanceStart > lateralToleranceMeters && lateralDistanceEnd > lateralToleranceMeters) {
-        return false;
-    }
+//     // If both points of the historical segment are too far to the side, there is no overlap
+//     if (lateralDistanceStart > lateralToleranceMeters && lateralDistanceEnd > lateralToleranceMeters) {
+//         return false;
+//     }
 
-    // Lambda for finding the projection of a point onto the current path vector (coefficient T from 0 to 1)
-    auto calculateProjectionT = [&](Vector2D point) {
-        return (point.x * currentPathVector.x + point.y * currentPathVector.y) / currentPathLengthSq;
-    };
+//     // Lambda for finding the projection of a point onto the current path vector (coefficient T from 0 to 1)
+//     auto calculateProjectionT = [&](Vector2D point) {
+//         return (point.x * currentPathVector.x + point.y * currentPathVector.y) / currentPathLengthSq;
+//     };
 
-    double historyStartT = calculateProjectionT(historyStartRelative);
-    double historyEndT   = calculateProjectionT(historyEndRelative);
+//     double historyStartT = calculateProjectionT(historyStartRelative);
+//     double historyEndT   = calculateProjectionT(historyEndRelative);
 
-    double historyMinT = std::min(historyStartT, historyEndT);
-    double historyMaxT = std::max(historyStartT, historyEndT);
+//     double historyMinT = std::min(historyStartT, historyEndT);
+//     double historyMaxT = std::max(historyStartT, historyEndT);
 
-    // We find the boundaries of the intersection of segments (in the range 0.0 ... 1.0 of the current path)
-    double overlapStartT = std::max(0.0, historyMinT);
-    double overlapEndT   = std::min(1.0, historyMaxT);
+//     // We find the boundaries of the intersection of segments (in the range 0.0 ... 1.0 of the current path)
+//     double overlapStartT = std::max(0.0, historyMinT);
+//     double overlapEndT   = std::min(1.0, historyMaxT);
 
-    if (overlapStartT >= overlapEndT) {
-        return false;
-    }
+//     if (overlapStartT >= overlapEndT) {
+//         return false;
+//     }
 
-    // Calculate the physical length of the ceiling in meters
-    double overlapLengthMeters = (overlapEndT - overlapStartT) * currentPathLength;
+//     // Calculate the physical length of the ceiling in meters
+//     double overlapLengthMeters = (overlapEndT - overlapStartT) * currentPathLength;
 
-    // If the overlap length is more than 1 meter, we consider the path redundant
-    if (overlapLengthMeters > 1.0) {
-        return true;
-    }
+//     // If the overlap length is more than 1 meter, we consider the path redundant
+//     if (overlapLengthMeters > 1.0) {
+//         return true;
+//     }
 
-    return false;
-}
+//     return false;
+// }
 
 void AgroComplexItem::_appendComplexItemGlobalSettings(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum)
 {
@@ -381,8 +382,9 @@ void AgroComplexItem::_appendComplexItemGlobalSettings(QList<MissionItem*>& item
                                      1, speed, -1, 0, 0, 0, 0, true, false, missionItemParent));
     }
 
-    _appendSprayerCommand(items, missionItemParent, seqNum, true);
-    _simulatedSprayerState = true;
+    // TODO: saving spray fluid
+    // _appendSprayerCommand(items, missionItemParent, seqNum, true);
+    // _simulatedSprayerState = true;
 }
 
 void AgroComplexItem::_appendComplexItemSpecificActions(
@@ -408,35 +410,32 @@ void AgroComplexItem::_appendComplexItemSpecificActions(
         return;
     }
 
-    if (_actionIteratorIndex >= _rgFlightPathCoordInfo.count() - 1) {
-        return;
+    if (!_simulatedSprayerState) {
+        _appendSprayerCommand(items, missionItemParent, seqNum, true);
+        _simulatedSprayerState = true;
     }
 
-    QGeoCoordinate currentPoint = _rgFlightPathCoordInfo[_actionIteratorIndex].coord;
+    // QGeoCoordinate currentPoint = _rgFlightPathCoordInfo[_actionIteratorIndex].coord;
     
-    QGeoCoordinate nextPoint = _rgFlightPathCoordInfo[_actionIteratorIndex + 1].coord;
+    // QGeoCoordinate nextPoint = _rgFlightPathCoordInfo[_actionIteratorIndex + 1].coord;
 
-    bool isDuplicate = _isPathRedundant(currentPoint, nextPoint);
+    // bool isDuplicate = _isPathRedundant(currentPoint, nextPoint);
 
-    if (_actionIteratorIndex < 3 || _actionIteratorIndex > (_rgFlightPathCoordInfo.count() - 5)) {
-        isDuplicate = false; 
-    }
-
-    if (isDuplicate) {
-        if (_simulatedSprayerState) {
-            _appendSprayerCommand(items, missionItemParent, seqNum, false);
-            _simulatedSprayerState = false;
-        }
-    } else {
-        if (!_simulatedSprayerState) {
-            _appendSprayerCommand(items, missionItemParent, seqNum, true);
-            _simulatedSprayerState = true;
-        }
+    // if (isDuplicate) {
+    //     if (_simulatedSprayerState) {
+    //         _appendSprayerCommand(items, missionItemParent, seqNum, false);
+    //         _simulatedSprayerState = false;
+    //     }
+    // } else {
+    //     if (!_simulatedSprayerState) {
+    //         _appendSprayerCommand(items, missionItemParent, seqNum, true);
+    //         _simulatedSprayerState = true;
+    //     }
         
-        _sprayedHistory.append({currentPoint, nextPoint});
-    }
+    //     _sprayedHistory.append({currentPoint, nextPoint});
+    // }
 
-    _actionIteratorIndex++;
+    // _actionIteratorIndex++;
 }
 
 void AgroComplexItem::save(QJsonArray&  planItems)
