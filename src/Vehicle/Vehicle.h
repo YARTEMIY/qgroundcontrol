@@ -17,32 +17,31 @@
 #include "QGCMAVLink.h"
 #include "QmlObjectListModel.h"
 #include "SysStatusSensorInfo.h"
-#include "VehicleLinkManager.h"
-
-#include "TerrainFactGroup.h"
 #include "VehicleFactGroup.h"
-#include "VehicleClockFactGroup.h"
-#include "VehicleDistanceSensorFactGroup.h"
-#include "VehicleEFIFactGroup.h"
-#include "VehicleEstimatorStatusFactGroup.h"
-#include "VehicleGeneratorFactGroup.h"
-#include "VehicleGPS2FactGroup.h"
-#include "VehicleGPSFactGroup.h"
-#include "VehicleGPSAggregateFactGroup.h"
-#include "VehicleHygrometerFactGroup.h"
-#include "VehicleLocalPositionFactGroup.h"
-#include "VehicleLocalPositionSetpointFactGroup.h"
-#include "VehicleRPMFactGroup.h"
-#include "VehicleSetpointFactGroup.h"
-#include "VehicleTemperatureFactGroup.h"
-#include "VehicleVibrationFactGroup.h"
-#include "VehicleWindFactGroup.h"
-#include "GimbalController.h"
-#include "BatteryFactGroupListModel.h"
-#include "EscStatusFactGroupListModel.h"
+#include "VehicleLinkManager.h"
 
 class Actuators;
 class AutoPilotPlugin;
+class BatteryFactGroupListModel;
+class EscStatusFactGroupListModel;
+class GimbalController;
+class TerrainFactGroup;
+class VehicleClockFactGroup;
+class VehicleDistanceSensorFactGroup;
+class VehicleEFIFactGroup;
+class VehicleEstimatorStatusFactGroup;
+class VehicleGeneratorFactGroup;
+class VehicleGPS2FactGroup;
+class VehicleGPSFactGroup;
+class VehicleGPSAggregateFactGroup;
+class VehicleHygrometerFactGroup;
+class VehicleLocalPositionFactGroup;
+class VehicleLocalPositionSetpointFactGroup;
+class VehicleRPMFactGroup;
+class VehicleSetpointFactGroup;
+class VehicleTemperatureFactGroup;
+class VehicleVibrationFactGroup;
+class VehicleWindFactGroup;
 class Autotune;
 class ComponentInformationManager;
 class EventHandler;
@@ -68,6 +67,7 @@ class TerrainAtCoordinateQuery;
 class TerrainProtocolHandler;
 class TrajectoryPoints;
 class VehicleObjectAvoidance;
+class VehicleSupports;
 
 namespace events {
 namespace parser {
@@ -91,6 +91,8 @@ class Vehicle : public VehicleFactGroup
     Q_MOC_INCLUDE("Actuators.h")
     Q_MOC_INCLUDE("MAVLinkLogManager.h")
     Q_MOC_INCLUDE("LinkInterface.h")
+    Q_MOC_INCLUDE("VehicleSupports.h")
+    Q_MOC_INCLUDE("GimbalController.h")
 
     friend class InitialConnectStateMachine;
     friend class VehicleLinkManager;
@@ -159,11 +161,7 @@ public:
     Q_PROPERTY(bool                 vtol                        READ vtol                                                           NOTIFY vehicleTypeChanged)
     Q_PROPERTY(bool                 rover                       READ rover                                                          NOTIFY vehicleTypeChanged)
     Q_PROPERTY(bool                 sub                         READ sub                                                            NOTIFY vehicleTypeChanged)
-    Q_PROPERTY(bool        supportsThrottleModeCenterZero       READ supportsThrottleModeCenterZero                                 CONSTANT)
-    Q_PROPERTY(bool                supportsNegativeThrust       READ supportsNegativeThrust                                         CONSTANT)
-    Q_PROPERTY(bool                 supportsJSButton            READ supportsJSButton                                               CONSTANT)
-    Q_PROPERTY(bool                 supportsRadio               READ supportsRadio                                                  CONSTANT)
-    Q_PROPERTY(bool               supportsMotorInterference     READ supportsMotorInterference                                      CONSTANT)
+    Q_PROPERTY(VehicleSupports*     supports                    READ supports                                                       CONSTANT)
     Q_PROPERTY(QString              prearmError                 READ prearmError                WRITE setPrearmError                NOTIFY prearmErrorChanged)
     Q_PROPERTY(int                  motorCount                  READ motorCount                                                     CONSTANT)
     Q_PROPERTY(bool                 coaxialMotors               READ coaxialMotors                                                  CONSTANT)
@@ -179,7 +177,6 @@ public:
     Q_PROPERTY(QString              pauseFlightMode             READ pauseFlightMode                                                CONSTANT)
     Q_PROPERTY(QString              rtlFlightMode               READ rtlFlightMode                                                  CONSTANT)
     Q_PROPERTY(QString              smartRTLFlightMode          READ smartRTLFlightMode                                             CONSTANT)
-    Q_PROPERTY(bool                 supportsSmartRTL            READ supportsSmartRTL                                               CONSTANT)
     Q_PROPERTY(QString              landFlightMode              READ landFlightMode                                                 CONSTANT)
     Q_PROPERTY(QString              takeControlFlightMode       READ takeControlFlightMode                                          CONSTANT)
     Q_PROPERTY(QString              followFlightMode            READ followFlightMode                                               CONSTANT)
@@ -201,7 +198,6 @@ public:
     Q_PROPERTY(QString              hobbsMeter                  READ hobbsMeter                                                     NOTIFY hobbsMeterChanged)
     Q_PROPERTY(bool                 inFwdFlight                 READ inFwdFlight                                                    NOTIFY inFwdFlightChanged)
     Q_PROPERTY(bool                 vtolInFwdFlight             READ vtolInFwdFlight            WRITE setVtolInFwdFlight            NOTIFY vtolInFwdFlightChanged)
-    Q_PROPERTY(bool                 supportsTerrainFrame        READ supportsTerrainFrame                                           NOTIFY firmwareTypeChanged)
     Q_PROPERTY(quint64              mavlinkSentCount            READ mavlinkSentCount                                               NOTIFY mavlinkStatusChanged)
     Q_PROPERTY(quint64              mavlinkReceivedCount        READ mavlinkReceivedCount                                           NOTIFY mavlinkStatusChanged)
     Q_PROPERTY(quint64              mavlinkLossCount            READ mavlinkLossCount                                               NOTIFY mavlinkStatusChanged)
@@ -226,13 +222,6 @@ public:
     Q_PROPERTY(bool     flying                  READ flying                                         NOTIFY flyingChanged)       ///< Vehicle is flying
     Q_PROPERTY(bool     landing                 READ landing                                        NOTIFY landingChanged)      ///< Vehicle is in landing pattern (DO_LAND_START)
     Q_PROPERTY(bool     guidedMode              READ guidedMode                 WRITE setGuidedMode NOTIFY guidedModeChanged)   ///< Vehicle is in Guided mode and can respond to guided commands
-    Q_PROPERTY(bool     guidedModeSupported     READ guidedModeSupported                            CONSTANT)                   ///< Guided mode commands are supported by this vehicle
-    Q_PROPERTY(bool     pauseVehicleSupported   READ pauseVehicleSupported                          CONSTANT)                   ///< Pause vehicle command is supported
-    Q_PROPERTY(bool     orbitModeSupported      READ orbitModeSupported                             CONSTANT)                   ///< Orbit mode is supported by this vehicle
-    Q_PROPERTY(bool     roiModeSupported        READ roiModeSupported                               CONSTANT)                   ///< Orbit mode is supported by this vehicle
-    Q_PROPERTY(bool     takeoffVehicleSupported READ takeoffVehicleSupported                        CONSTANT)                   ///< Takeoff supported
-    Q_PROPERTY(bool     guidedTakeoffSupported  READ guidedTakeoffSupported                         CONSTANT)                   ///< Guided takeoff supported
-    Q_PROPERTY(bool     changeHeadingSupported  READ changeHeadingSupported                         CONSTANT)                   ///< Change Heading supported
     Q_PROPERTY(QString  gotoFlightMode          READ gotoFlightMode                                 CONSTANT)                   ///< Flight mode vehicle is in while performing goto
     Q_PROPERTY(bool     haveMRSpeedLimits       READ haveMRSpeedLimits                              NOTIFY haveMRSpeedLimChanged)
     Q_PROPERTY(bool     haveFWSpeedLimits       READ haveFWSpeedLimits                              NOTIFY haveFWSpeedLimChanged)
@@ -411,14 +400,9 @@ public:
     Q_INVOKABLE QVariant expandedToolbarIndicatorSource(const QString& indicatorName);
 
     bool    isInitialConnectComplete() const;
-    bool    guidedModeSupported     () const;
-    bool    pauseVehicleSupported   () const;
-    bool    orbitModeSupported      () const;
-    bool    roiModeSupported        () const;
-    bool    takeoffVehicleSupported () const;
-    bool    guidedTakeoffSupported  () const;
-    bool    changeHeadingSupported  () const;
     QString gotoFlightMode          () const;
+
+    VehicleSupports* supports() { return _vehicleSupports; }
     bool    hasGripper              () const;
     bool haveMRSpeedLimits() const { return _multirotor_speed_limits_available; }
     bool haveFWSpeedLimits() const { return _fixed_wing_airspeed_limits_available; }
@@ -482,12 +466,7 @@ public:
     bool sub() const;
     bool spacecraft() const;
 
-    bool supportsThrottleModeCenterZero () const;
-    bool supportsNegativeThrust         ();
-    bool supportsRadio                  () const;
-    bool supportsJSButton               () const;
-    bool supportsMotorInterference      () const;
-    bool supportsTerrainFrame           () const;
+
 
     void setGuidedMode(bool guidedMode);
 
@@ -537,7 +516,6 @@ public:
     QString         pauseFlightMode             () const;
     QString         rtlFlightMode               () const;
     QString         smartRTLFlightMode          () const;
-    bool            supportsSmartRTL            () const;
     QString         landFlightMode              () const;
     QString         takeControlFlightMode       () const;
     QString         followFlightMode            () const;
@@ -573,26 +551,26 @@ public:
     void stopUAVCANBusConfig(void);
 
     FactGroup* vehicleFactGroup             () { return _vehicleFactGroup; }
-    FactGroup* gpsFactGroup                 () { return &_gpsFactGroup; }
-    FactGroup* gps2FactGroup                () { return &_gps2FactGroup; }
-    FactGroup* gpsAggregateFactGroup        () { return &_gpsAggregateFactGroup; }
-    FactGroup* windFactGroup                () { return &_windFactGroup; }
-    FactGroup* vibrationFactGroup           () { return &_vibrationFactGroup; }
-    FactGroup* temperatureFactGroup         () { return &_temperatureFactGroup; }
-    FactGroup* clockFactGroup               () { return &_clockFactGroup; }
-    FactGroup* setpointFactGroup            () { return &_setpointFactGroup; }
-    FactGroup* distanceSensorFactGroup      () { return &_distanceSensorFactGroup; }
-    FactGroup* localPositionFactGroup       () { return &_localPositionFactGroup; }
-    FactGroup* localPositionSetpointFactGroup() { return &_localPositionSetpointFactGroup; }
-    FactGroup* estimatorStatusFactGroup     () { return &_estimatorStatusFactGroup; }
-    FactGroup* terrainFactGroup             () { return &_terrainFactGroup; }
-    FactGroup* hygrometerFactGroup          () { return &_hygrometerFactGroup; }
-    FactGroup* generatorFactGroup           () { return &_generatorFactGroup; }
-    FactGroup* efiFactGroup                 () { return &_efiFactGroup; }
-    FactGroup* rpmFactGroup                 () { return &_rpmFactGroup; }
+    FactGroup* gpsFactGroup                 ();
+    FactGroup* gps2FactGroup                ();
+    FactGroup* gpsAggregateFactGroup        ();
+    FactGroup* windFactGroup                ();
+    FactGroup* vibrationFactGroup           ();
+    FactGroup* temperatureFactGroup         ();
+    FactGroup* clockFactGroup               ();
+    FactGroup* setpointFactGroup            ();
+    FactGroup* distanceSensorFactGroup      ();
+    FactGroup* localPositionFactGroup       ();
+    FactGroup* localPositionSetpointFactGroup();
+    FactGroup* estimatorStatusFactGroup     ();
+    FactGroup* terrainFactGroup             ();
+    FactGroup* hygrometerFactGroup          ();
+    FactGroup* generatorFactGroup           ();
+    FactGroup* efiFactGroup                 ();
+    FactGroup* rpmFactGroup                 ();
 
-    QmlObjectListModel* batteries           () { return &_batteryFactGroupListModel; }
-    QmlObjectListModel* escs                () { return &_escStatusFactGroupListModel; }
+    QmlObjectListModel* batteries           ();
+    QmlObjectListModel* escs                ();
 
     MissionManager*                 missionManager      () { return _missionManager; }
     GeoFenceManager*                geoFenceManager     () { return _geoFenceManager; }
@@ -1050,6 +1028,7 @@ void _activeVehicleChanged          (Vehicle* newActiveVehicle);
     VehicleObjectAvoidance*         _objectAvoidance                = nullptr;
     Autotune*                       _autotune                       = nullptr;
     GimbalController*               _gimbalController               = nullptr;
+    VehicleSupports*                _vehicleSupports                = nullptr;
 
     bool    _armed = false;         ///< true: vehicle is armed
     uint8_t _base_mode = 0;     ///< base_mode from HEARTBEAT
@@ -1239,27 +1218,27 @@ public:
     const QString _rpmFactGroupName =                QStringLiteral("rpm");
 
     VehicleFactGroup*               _vehicleFactGroup;
-    VehicleGPSFactGroup             _gpsFactGroup;
-    VehicleGPS2FactGroup            _gps2FactGroup;
-    VehicleGPSAggregateFactGroup    _gpsAggregateFactGroup;
-    VehicleWindFactGroup            _windFactGroup;
-    VehicleVibrationFactGroup       _vibrationFactGroup;
-    VehicleTemperatureFactGroup     _temperatureFactGroup;
-    VehicleClockFactGroup           _clockFactGroup;
-    VehicleSetpointFactGroup        _setpointFactGroup;
-    VehicleDistanceSensorFactGroup  _distanceSensorFactGroup;
-    VehicleLocalPositionFactGroup   _localPositionFactGroup;
-    VehicleLocalPositionSetpointFactGroup _localPositionSetpointFactGroup;
-    VehicleEstimatorStatusFactGroup _estimatorStatusFactGroup;
-    VehicleHygrometerFactGroup      _hygrometerFactGroup;
-    VehicleGeneratorFactGroup       _generatorFactGroup;
-    VehicleEFIFactGroup             _efiFactGroup;
-    VehicleRPMFactGroup             _rpmFactGroup;
-    TerrainFactGroup                _terrainFactGroup;
+    VehicleGPSFactGroup*                _gpsFactGroup               = nullptr;
+    VehicleGPS2FactGroup*               _gps2FactGroup              = nullptr;
+    VehicleGPSAggregateFactGroup*       _gpsAggregateFactGroup      = nullptr;
+    VehicleWindFactGroup*               _windFactGroup              = nullptr;
+    VehicleVibrationFactGroup*          _vibrationFactGroup         = nullptr;
+    VehicleTemperatureFactGroup*        _temperatureFactGroup       = nullptr;
+    VehicleClockFactGroup*              _clockFactGroup             = nullptr;
+    VehicleSetpointFactGroup*           _setpointFactGroup          = nullptr;
+    VehicleDistanceSensorFactGroup*     _distanceSensorFactGroup    = nullptr;
+    VehicleLocalPositionFactGroup*      _localPositionFactGroup     = nullptr;
+    VehicleLocalPositionSetpointFactGroup* _localPositionSetpointFactGroup = nullptr;
+    VehicleEstimatorStatusFactGroup*    _estimatorStatusFactGroup   = nullptr;
+    VehicleHygrometerFactGroup*         _hygrometerFactGroup        = nullptr;
+    VehicleGeneratorFactGroup*          _generatorFactGroup         = nullptr;
+    VehicleEFIFactGroup*                _efiFactGroup               = nullptr;
+    VehicleRPMFactGroup*                _rpmFactGroup               = nullptr;
+    TerrainFactGroup*                   _terrainFactGroup           = nullptr;
 
     // Dynamic FactGroups
-    BatteryFactGroupListModel       _batteryFactGroupListModel;
-    EscStatusFactGroupListModel     _escStatusFactGroupListModel;
+    BatteryFactGroupListModel*          _batteryFactGroupListModel  = nullptr;
+    EscStatusFactGroupListModel*        _escStatusFactGroupListModel = nullptr;
 
     TerrainProtocolHandler* _terrainProtocolHandler = nullptr;
 

@@ -9,6 +9,7 @@ import QGroundControl.Controls
 import QGroundControl.FactControls
 import QGroundControl.FlyView
 import QGroundControl.FlightMap
+import QGroundControl.PlanView
 import QGroundControl.Toolbar
 
 /// @brief Native QML top level window
@@ -607,7 +608,7 @@ ApplicationWindow {
     // to mainWindow. Otherwise if they are rooted to the AnalyzeView itself they will die when the analyze viewSwitch
     // closes.
 
-    function createrWindowedAnalyzePage(title, source) {
+    function createWindowedAnalyzePage(title, source) {
         var windowedPage = windowedAnalyzePage.createObject(mainWindow)
         windowedPage.title = title
         windowedPage.source = source
