@@ -1055,11 +1055,6 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
         _transects.clear();
     }
 
-    double swathWidth = _swathWidthFact.rawValue().toDouble();
-    if (swathWidth < 0.1) {
-        swathWidth = 0.1;
-    }
-
     QGeoCoordinate origin = _surveyAreaPolygon.pathModel().value<QGCQGeoCoordinate*>(0)->coordinate();
 
     QPolygonF mainPolyNED;
@@ -1076,9 +1071,9 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
     QList<QPolygonF> checkExclusionPolys;
     _inflateExclusionZones(rawExclusionPolys, 0.3 /* checkMargin */, checkExclusionPolys);
 
-    double gridSpacing = swathWidth; 
-    
+    double gridSpacing = _cameraCalc.adjustedFootprintSide()->rawValue().toDouble();
     double gridAngle = _clampGridAngle90(_gridAngleFact.rawValue().toDouble() + (refly ? 90.0 : 0.0));
+
     if (qAbs(gridAngle) < 1.0) {
         gridAngle = (gridAngle >= 0) ? 1.0 : -1.0;
     }
