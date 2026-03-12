@@ -450,11 +450,11 @@ VisualMissionItem* MissionController::insertComplexMissionItem(QString itemName,
         newItem->setCoordinate(mapCenterCoordinate);
 
         double                              prevAltitude;
-        QGroundControlQmlGlobal::AltMode    prevAltMode;
-        if (globalAltitudeMode() == QGroundControlQmlGlobal::AltitudeModeMixed) {
-            // We are in mixed altitude modes, so copy from previous. Otherwise alt mode will be set from global setting in constructor.
-            if (_findPreviousAltitude(visualItemIndex, &prevAltitude, &prevAltMode)) {
-                qobject_cast<AgroComplexItem*>(newItem)->cameraCalc()->setDistanceMode(prevAltMode);
+        QGroundControlQmlGlobal::AltitudeFrame    prevAltFrame;
+        if (globalAltitudeFrame() == QGroundControlQmlGlobal::AltitudeFrameMixed) {
+            // We are in mixed altitude frames, so copy from previous. Otherwise alt mode will be set from global setting in constructor.
+            if (_findPreviousAltitude(visualItemIndex, &prevAltitude, &prevAltFrame)) {
+                qobject_cast<AgroComplexItem*>(newItem)->cameraCalc()->setDistanceMode(prevAltFrame);
             }
         }
     } else if (itemName == FixedWingLandingComplexItem::name) {

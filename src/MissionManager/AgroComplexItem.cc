@@ -79,7 +79,7 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     , _isExclusionZoneFact      (settingsGroup, _metaDataMap[isExclusionZoneName])
     , _entryPoint               (EntryLocationTopLeft)
 {
-    _editorQml = "qrc:/qml/QGroundControl/Controls/AgroItemEditor.qml";
+    _editorQml = "qrc:/qml/QGroundControl/PlanView/AgroItemEditor.qml";
 
     if (_controllerVehicle && !(_controllerVehicle->fixedWing() || _controllerVehicle->vtol())) {
         // Only fixed wing flight paths support alternate transects
@@ -293,8 +293,6 @@ void AgroComplexItem::_appendComplexItemGlobalSettings(QList<MissionItem*>& item
     if (_isExclusionZoneFact.rawValue().toBool()) {
         return;
     }
-
-    _simulatedSprayerState = false;
 
     double speed = _vehicleSpeedFact.rawValue().toDouble();
     if (speed > 0) {
@@ -591,7 +589,7 @@ bool AgroComplexItem::_loadV3(const QJsonObject& complexObject, int sequenceNumb
     _cameraTriggerInTurnAroundFact.setRawValue  (complexObject[_jsonV3CameraTriggerInTurnaroundKey].toBool(true));
 
     _cameraCalc.valueSetIsDistance()->setRawValue   (complexObject[_jsonV3FixedValueIsAltitudeKey].toBool(true));
-    _cameraCalc.setDistanceMode(complexObject[_jsonV3GridAltitudeRelativeKey].toBool(true) ? QGroundControlQmlGlobal::AltitudeModeRelative : QGroundControlQmlGlobal::AltitudeModeAbsolute);
+    _cameraCalc.setDistanceMode(complexObject[_jsonV3GridAltitudeRelativeKey].toBool(true) ? QGroundControlQmlGlobal::AltitudeFrameRelative : QGroundControlQmlGlobal::AltitudeFrameAbsolute);
 
     bool manualGrid = complexObject[_jsonV3ManualGridKey].toBool(true);
 
