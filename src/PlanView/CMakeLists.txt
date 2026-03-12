@@ -10,6 +10,8 @@ qt_add_qml_module(PlanViewModule
     VERSION 1.0
     RESOURCE_PREFIX /qml
     QML_FILES
+        AgroItemEditor.qml
+        AgroMapVisual.qml
         CameraCalcCamera.qml
         CameraCalcGrid.qml
         CameraSection.qml
