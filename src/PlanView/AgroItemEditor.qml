@@ -86,9 +86,6 @@ TransectStyleComplexItemEditor {
             }
 
             // --- Sprayer Settings ---
-            property bool isArduPilot: _vehicle ? _vehicle.firmwareType === MAVLink.MAV_AUTOPILOT_ARDUPILOTMEGA : true
-            property bool isPX4:       _vehicle ? _vehicle.firmwareType === MAVLink.MAV_AUTOPILOT_PX4 : false
-
             Rectangle {
                 Layout.columnSpan:      2; Layout.fillWidth: true; height: 1
                 color:                  QGroundControl.globalPalette.text; opacity: 0.5
@@ -96,77 +93,85 @@ TransectStyleComplexItemEditor {
             }
 
             QGCLabel {
-                text:                   qsTr("Sprayer Settings");
+                text:                   missionItem.isArduPilot ? qsTr("Sprayer (ArduPilot Settings)") : qsTr("Sprayer (PX4 Settings)")
                 font.bold:              true;
                 Layout.columnSpan:      2
             }
 
             FactCheckBox {
-                text:                   qsTr("Enable Sprayer Path");
+                text:                   qsTr("Enable Sprayer");
                 fact:                   missionItem.sprayEnabled
                 Layout.columnSpan:      2
             }
 
-            // --- ПОЛЯ ID ПРИВОДОВ (PINS) ---
-            
-            // Pump ID (виден всегда: для PX4 это номер актуатора, для Ardu это номер пина)
-            QGCLabel { text: qsTr("Pump ID / Pin") }
+            QGCLabel { 
+                text:       qsTr("Pump Actuator ID")
+                visible:    missionItem.isPX4 
+            }
             FactTextField { 
-                fact:               missionItem.pumpActuatorId
-                Layout.fillWidth:   true 
+                fact:       missionItem.pumpActuatorId
+                Layout.fillWidth: true
+                visible:    missionItem.isPX4
             }
 
-            // Spinner ID (виден только для ArduPilot)
-            QGCLabel { 
-                text:               qsTr("Spinner ID / Pin")
-                visible:            isArduPilot 
+            QGCLabel {
+                text: qsTr("Pump Pin ID");
+                visible: missionItem.isArduPilot
             }
-            FactTextField { 
-                fact:               missionItem.spinnerActuatorId
-                Layout.fillWidth:   true
-                visible:            isArduPilot 
-            }
-
-            // --- РАСШИРЕННЫЕ ПАРАМЕТРЫ (Только для ArduPilot) ---
-            
-            QGCLabel { 
-                text:               qsTr("Pump Rate (%)")
-                visible:            isArduPilot 
-            }
-            FactTextField { 
-                fact:               missionItem.pumpRate
-                Layout.fillWidth:   true
-                visible:            isArduPilot 
+            FactTextField {
+                fact: missionItem.pumpActuatorId;
+                Layout.fillWidth: true;
+                visible: missionItem.isArduPilot
             }
 
-            QGCLabel { 
-                text:               qsTr("Spinner PWM")
-                visible:            isArduPilot 
+            QGCLabel {
+                text: qsTr("Spinner Pin ID");
+                visible: missionItem.isArduPilot
             }
-            FactTextField { 
-                fact:               missionItem.spinnerPWM
-                Layout.fillWidth:   true
-                visible:            isArduPilot 
-            }
-
-            QGCLabel { 
-                text:               qsTr("Min Speed (cm/s)")
-                visible:            isArduPilot 
-            }
-            FactTextField { 
-                fact:               missionItem.minSpeed
-                Layout.fillWidth:   true
-                visible:            isArduPilot 
+            FactTextField {
+                fact: missionItem.spinnerActuatorId;
+                Layout.fillWidth: true;
+                visible: missionItem.isArduPilot
             }
 
-            QGCLabel { 
-                text:               qsTr("Min Pump (%)")
-                visible:            isArduPilot 
+            QGCLabel {
+                text: qsTr("Pump Rate (%)");
+                visible: missionItem.isArduPilot
             }
-            FactTextField { 
-                fact:               missionItem.minPump
-                Layout.fillWidth:   true
-                visible:            isArduPilot 
+            FactTextField {
+                fact: missionItem.pumpRate;
+                Layout.fillWidth: true;
+                visible: missionItem.isArduPilot
+            }
+
+            QGCLabel {
+                text: qsTr("Spinner PWM");
+                visible: missionItem.isArduPilot
+            }
+            FactTextField {
+                fact: missionItem.spinnerPWM;
+                Layout.fillWidth: true;
+                visible: missionItem.isArduPilot
+            }
+
+            QGCLabel {
+                text: qsTr("Min Speed (cm/s)");
+                visible: missionItem.isArduPilot
+            }
+            FactTextField {
+                fact: missionItem.minSpeed;
+                Layout.fillWidth: true;
+                visible: missionItem.isArduPilot
+            }
+
+            QGCLabel {
+                text: qsTr("Min Pump (%)");
+                visible: missionItem.isArduPilot
+            }
+            FactTextField {
+                fact: missionItem.minPump;
+                Layout.fillWidth: true;
+                visible: missionItem.isArduPilot
             }
 
             Rectangle {

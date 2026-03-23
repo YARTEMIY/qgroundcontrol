@@ -59,6 +59,9 @@ public:
 
     Q_INVOKABLE void rotateEntryPoint(void);
     Q_INVOKABLE void sendAdvancedParametersToVehicle();
+    
+    bool isArduPilot(void) const;
+    bool isPX4(void)       const;
 
     // Overrides from ComplexMissionItem
     QString         patternName         (void) const final { return name; }
@@ -114,10 +117,6 @@ public:
     static constexpr const char* spinnerPWMName =             "SpinnerPWM";
     static constexpr const char* minPumpName =                "MinPump";
     static constexpr const char* minSpeedName =               "MinSpeed";
-    static constexpr const char* calcModeEnabledName =        "CalcModeEnabled";
-    static constexpr const char* targetRateName =             "TargetRate";
-    static constexpr const char* flowRateMaxName =            "FlowRateMax";
-    static constexpr const char* swathWidthName =             "SwathWidth";
 
 signals:
     void refly90DegreesChanged(bool refly90Degrees);

@@ -153,6 +153,14 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
 
 }
 
+bool AgroComplexItem::isArduPilot(void) const {
+    return _controllerVehicle ? (_controllerVehicle->firmwareType() == MAV_AUTOPILOT_ARDUPILOTMEGA) : false;
+}
+
+bool AgroComplexItem::isPX4(void) const {
+    return _controllerVehicle ? (_controllerVehicle->firmwareType() == MAV_AUTOPILOT_PX4) : false;
+}
+
 void AgroComplexItem::_queueRebuildTransects()
 {
     _recalcTimer.start(); 
