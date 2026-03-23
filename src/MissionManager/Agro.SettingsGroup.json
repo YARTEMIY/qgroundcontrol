@@ -42,38 +42,6 @@
     "default":          5.0
 },
 {
-    "name":             "CalcModeEnabled",
-    "shortDesc": "Enable Auto-Calculation by L/ha.",
-    "type":             "bool",
-    "default":          true
-},
-{
-    "name":             "TargetRate",
-    "shortDesc": "Target Application Rate (R).",
-    "type":             "double",
-    "units":            "L/ha",
-    "min":              1.0,
-    "max":              10.0,
-    "decimalPlaces":    1,
-    "default":          2.0
-},
-{
-    "name":             "FlowRateMax",
-    "shortDesc": "Max Pump Flow Rate (q) from Sensor.",
-    "type":             "double",
-    "units":            "L/min",
-    "decimalPlaces":    2,
-    "default":          3.0
-},
-{
-    "name":             "SwathWidth",
-    "shortDesc": "Swath Width (s) from Sensor.",
-    "type":             "double",
-    "units":            "m",
-    "decimalPlaces":    2,
-    "default":          5.0
-},
-{
     "name":             "SprayEnabled",
     "shortDesc": "Enable Sprayer generation.",
     "type":             "bool",
@@ -96,44 +64,43 @@
     "default":          2
 },
 {
-    "name":             "PumpFixedValue",
-    "shortDesc": "Value for Pump when ON (Fixed mode).",
-    "type":             "double",
-    "decimalPlaces":    2,
-    "min":              -1.0,
-    "max":              1.0,
-    "default":          1.0
+    "name": "PumpRate",
+    "shortDesc": "Pump speed (%).",
+    "type": "double",
+    "units": "%",
+    "min": 0.0,
+    "max": 100.0,
+    "decimalPlaces": 0,
+    "default": 10.0
 },
 {
-    "name":             "PumpRate",
-    "shortDesc": "Pump rate per 1m/s speed (Slope).",
-    "type":             "double",
-    "units":            "%/m/s",
-    "decimalPlaces":    2,
-    "default":          0.2
+    "name": "SpinnerPWM",
+    "shortDesc": "Spinner rotation speed in PWM.",
+    "type": "double",
+    "min": 1000.0,
+    "max": 2000.0,
+    "decimalPlaces": 0,
+    "default": 1000.0
 },
 {
-    "name":             "SpinnerPWM",
-    "shortDesc": "Spinner speed (Normalized -1..1).",
-    "type":             "double",
-    "decimalPlaces":    2,
-    "default":          0.8
+    "name": "MinSpeed",
+    "shortDesc": "Speed minimum at which we will begin spraying.",
+    "type": "double",
+    "units": "cm/s",
+    "min": 0.0,
+    "max": 1000.0,
+    "decimalPlaces": 0,
+    "default": 100.0
 },
 {
-    "name":             "MinPump",
-    "shortDesc": "Minimum Pump output %.",
-    "type":             "double",
-    "units":            "%",
-    "min":              0.0,
-    "max":              100.0,
-    "default":          10.0
-},
-{
-    "name":             "MinSpeed",
-    "shortDesc": "Min speed to spray.",
-    "type":             "double",
-    "units":            "m/s",
-    "default":          1.0
+    "name": "MinPump",
+    "shortDesc": "Minimum pump speed (%).",
+    "type": "double",
+    "units": "%",
+    "min": 0.0,
+    "max": 100.0,
+    "decimalPlaces": 0,
+    "default": 0.0
 }
 ]
 }

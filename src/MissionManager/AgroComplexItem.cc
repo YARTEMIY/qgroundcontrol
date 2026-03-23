@@ -15,6 +15,8 @@
 #include <QtCore/QLineF>
 
 #include "MissionController.h"
+#include "ParameterManager.h"
+#include "MultiVehicleManager.h"
 
 #include <algorithm>
 
@@ -67,16 +69,11 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     , _sprayEnabledFact         (settingsGroup, _metaDataMap[sprayEnabledName])
     , _pumpActuatorIdFact       (settingsGroup, _metaDataMap[pumpActuatorIdName])
     , _spinnerActuatorIdFact    (settingsGroup, _metaDataMap[spinnerActuatorIdName])
-    , _pumpFixedValueFact       (settingsGroup, _metaDataMap[pumpFixedValueName])
+    , _isExclusionZoneFact      (settingsGroup, _metaDataMap[isExclusionZoneName])
     , _pumpRateFact             (settingsGroup, _metaDataMap[pumpRateName])
     , _spinnerPWMFact           (settingsGroup, _metaDataMap[spinnerPWMName])
     , _minPumpFact              (settingsGroup, _metaDataMap[minPumpName])
     , _minSpeedFact             (settingsGroup, _metaDataMap[minSpeedName])
-    , _calcModeEnabledFact      (settingsGroup, _metaDataMap[calcModeEnabledName])
-    , _targetRateFact           (settingsGroup, _metaDataMap[targetRateName])
-    , _flowRateMaxFact          (settingsGroup, _metaDataMap[flowRateMaxName])
-    , _swathWidthFact           (settingsGroup, _metaDataMap[swathWidthName])
-    , _isExclusionZoneFact      (settingsGroup, _metaDataMap[isExclusionZoneName])
     , _entryPoint               (EntryLocationTopLeft)
 {
     _editorQml = "qrc:/qml/QGroundControl/PlanView/AgroItemEditor.qml";
@@ -102,15 +99,10 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     connect(&_sprayEnabledFact,         &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_pumpActuatorIdFact,       &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_spinnerActuatorIdFact,    &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
-    connect(&_pumpFixedValueFact,       &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_pumpRateFact,             &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_spinnerPWMFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_minPumpFact,              &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_minSpeedFact,             &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
-    connect(&_calcModeEnabledFact,      &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
-    connect(&_targetRateFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
-    connect(&_flowRateMaxFact,          &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
-    connect(&_swathWidthFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(&_isExclusionZoneFact,      &Fact::valueChanged,                        this, &AgroComplexItem::_setDirty);
     connect(this,                       &AgroComplexItem::refly90DegreesChanged,    this, &AgroComplexItem::_setDirty);
 
@@ -121,18 +113,19 @@ AgroComplexItem::AgroComplexItem(PlanMasterController* masterController, bool fl
     connect(&_sprayEnabledFact,         &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_pumpActuatorIdFact,       &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_spinnerActuatorIdFact,    &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
-    connect(&_pumpFixedValueFact,       &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_pumpRateFact,             &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_spinnerPWMFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_minPumpFact,              &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
-    connect(&_vehicleSpeedFact,         &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
-    connect(&_swathWidthFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects); 
-    connect(&_calcModeEnabledFact,      &Fact::valueChanged,                        this, &AgroComplexItem::_recalcSpeedFromRate);
-    connect(&_targetRateFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_recalcSpeedFromRate);
-    connect(&_flowRateMaxFact,          &Fact::valueChanged,                        this, &AgroComplexItem::_recalcSpeedFromRate);
-    connect(&_swathWidthFact,           &Fact::valueChanged,                        this, &AgroComplexItem::_recalcSpeedFromRate);
+    connect(&_minSpeedFact,             &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(&_isExclusionZoneFact,      &Fact::valueChanged,                        this, &AgroComplexItem::_rebuildTransects);
     connect(this,                       &AgroComplexItem::refly90DegreesChanged,    this, &AgroComplexItem::_rebuildTransects);
+
+    connect(&_pumpActuatorIdFact,    &Fact::valueChanged, this, &AgroComplexItem::sendAdvancedParametersToVehicle);
+    connect(&_spinnerActuatorIdFact, &Fact::valueChanged, this, &AgroComplexItem::sendAdvancedParametersToVehicle);
+    connect(&_pumpRateFact,             &Fact::valueChanged,                        this, &AgroComplexItem::sendAdvancedParametersToVehicle);
+    connect(&_spinnerPWMFact,           &Fact::valueChanged,                        this, &AgroComplexItem::sendAdvancedParametersToVehicle);
+    connect(&_minPumpFact,              &Fact::valueChanged,                        this, &AgroComplexItem::sendAdvancedParametersToVehicle);
+    connect(&_minSpeedFact,             &Fact::valueChanged,                        this, &AgroComplexItem::sendAdvancedParametersToVehicle);
 
     connect(&_surveyAreaPolygon,        &QGCMapPolygon::isValidChanged,             this, &AgroComplexItem::_updateWizardMode);
     connect(&_surveyAreaPolygon,        &QGCMapPolygon::traceModeChanged,           this, &AgroComplexItem::_updateWizardMode);
@@ -165,30 +158,37 @@ void AgroComplexItem::_queueRebuildTransects()
     _recalcTimer.start(); 
 }
 
-void AgroComplexItem::_recalcSpeedFromRate(void)
+void AgroComplexItem::sendAdvancedParametersToVehicle()
 {
-    if (!_calcModeEnabledFact.rawValue().toBool()) {
-        return;
-    }
+    Vehicle* activeVehicle = MultiVehicleManager::instance()->activeVehicle();
+    if (!activeVehicle || activeVehicle->firmwareType() != MAV_AUTOPILOT_ARDUPILOTMEGA) return;
 
-    double lowRateMax = _flowRateMaxFact.rawValue().toDouble(); // L/min
-    double targetRate = _targetRateFact.rawValue().toDouble();  // L/ha
-    double swathWidth = _swathWidthFact.rawValue().toDouble();  // m
+    ParameterManager* paramMgr = activeVehicle->parameterManager();
+    if (!paramMgr) return;
 
-    if (targetRate <= 0 || swathWidth <= 0) {
-        return;
-    }
+    int compId = 1; 
 
-    double velocityMS = (lowRateMax * 600.0) / (targetRate * swathWidth) / 3.6;
+    auto sendParam = [&](const QString& paramName, float value) {
+        if (paramMgr->parameterExists(compId, paramName)) {
+            Fact* f = paramMgr->getParameter(compId, paramName);
+            if (f && f->rawValue().toFloat() != value) {
+                f->setRawValue(value);
+                qDebug() << "AgroItem Syncing Param:" << paramName << "Value:" << value;
+            }
+        }
+    };
 
-    if (velocityMS < 0.5) {
-        velocityMS = 0.5;
-    }
-    if (velocityMS > 20.0) {
-        velocityMS = 20.0;
-    }
+    sendParam("SPRAY_ENABLE",    1.0f);
+    sendParam("SPRAY_PUMP_RATE", _pumpRateFact.rawValue().toFloat());
+    sendParam("SPRAY_SPINNER",   _spinnerPWMFact.rawValue().toFloat());
+    sendParam("SPRAY_SPEED_MIN", _minSpeedFact.rawValue().toFloat());
+    sendParam("SPRAY_PUMP_MIN",  _minPumpFact.rawValue().toFloat());
 
-    _vehicleSpeedFact.setRawValue(velocityMS);
+    sendParam("SPRAY_PUMP_PIN",  _pumpActuatorIdFact.rawValue().toFloat());
+    sendParam("SPRAY_SPIN_PIN",  _spinnerActuatorIdFact.rawValue().toFloat());
+    
+    sendParam("SIM_SPR_PUMP",    _pumpActuatorIdFact.rawValue().toFloat());
+    sendParam("SIM_SPR_SPIN",    _spinnerActuatorIdFact.rawValue().toFloat());
 }
 
 void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject* missionItemParent, int& seqNum, bool active)
@@ -197,94 +197,45 @@ void AgroComplexItem::_appendSprayerCommand(QList<MissionItem*>& items, QObject*
         return;
     }
 
-    double pumpValue = -1.0;
-    double spinnerValue = -1.0;
-
-    if (active) {
-        if (_calcModeEnabledFact.rawValue().toBool()) {
-            pumpValue = 1.0;
-            spinnerValue = 1.0;
-        } else {
-            const double rate = _pumpRateFact.rawValue().toDouble();
-
-            if (rate > 0.001) {
-                const double speed = _vehicleSpeedFact.rawValue().toDouble();
-                const double minSpeed = _minSpeedFact.rawValue().toDouble();
-
-                if (speed >= minSpeed) {
-                    double targetPower = speed * (rate / 100.0);
-                    double minPower = _minPumpFact.rawValue().toDouble() / 100.0;
-
-                    targetPower = qBound(minPower, targetPower, 1.0);
-
-                    pumpValue = (targetPower * 2.0) - 1.0;
-                } else {
-                    pumpValue = -1.0;
-                }
-            } else {
-                pumpValue = _pumpFixedValueFact.rawValue().toDouble();
-            }
-
-            spinnerValue = _spinnerPWMFact.rawValue().toDouble();
-        }
-    }
-
-    MAV_AUTOPILOT firmwareType = _controllerVehicle ? _controllerVehicle->firmwareType() : MAV_AUTOPILOT_GENERIC;
-
     const int pumpId = _pumpActuatorIdFact.rawValue().toInt();
     const int spinnerId = _spinnerActuatorIdFact.rawValue().toInt();
+    
+    MAV_AUTOPILOT firmwareType = _controllerVehicle ? _controllerVehicle->firmwareType() : MAV_AUTOPILOT_GENERIC;
 
     if (firmwareType == MAV_AUTOPILOT_ARDUPILOTMEGA) {
-        auto valueToPWM = [](double val) -> double {
-            return qBound(1000.0, 1500.0 + (val * 500.0), 2000.0);
-        };
-
-        if (pumpId > 0) {
-            items.append(new MissionItem(seqNum++,
-                                         MAV_CMD_DO_SET_SERVO,
-                                         MAV_FRAME_MISSION,
-                                         (double)pumpId,
-                                         valueToPWM(pumpValue),
-                                         0, 0, 0, 0, 0,
-                                         true,
-                                         false,
-                                         missionItemParent));
-        }
-        if (spinnerId > 0) {
-            items.append(new MissionItem(seqNum++,
-                                         MAV_CMD_DO_SET_SERVO,
-                                         MAV_FRAME_MISSION,
-                                         (double)spinnerId,
-                                         valueToPWM(spinnerValue),
-                                         0, 0, 0, 0, 0,
-                                         true,
-                                         false,
-                                         missionItemParent));
-        }
-
-    } else if (firmwareType == MAV_AUTOPILOT_PX4){
-
-        MAV_CMD command = MAV_CMD_DO_SET_ACTUATOR;
-        double params[7];
-        for (int i = 0; i < 7; ++i) {
-            params[i] = qQNaN();
-        }
+        items.append(new MissionItem(seqNum++,
+                            MAV_CMD_DO_SPRAYER,
+                            MAV_FRAME_MISSION,
+                            active ? 1.0 : 0.0,
+                            0, 0, 0, 0, 0, 0,
+                            true,
+                            false,
+                            missionItemParent));
+    } else if (firmwareType == MAV_AUTOPILOT_PX4) {
+        double val = active ? 1.0 : 0.0;
+        double params[7] = {qQNaN(), qQNaN(), qQNaN(), qQNaN(), qQNaN(), qQNaN(), 0};
 
         if (pumpId >= 1 && pumpId <= 6) {
-            params[pumpId - 1] = pumpValue;
-        }
-        if (spinnerId >= 1 && spinnerId <= 6) {
-            params[spinnerId - 1] = spinnerValue;
+            params[pumpId - 1] = val;
         }
 
-        MissionItem* item = new MissionItem(seqNum++,
-                                            command,
-                                            MAV_FRAME_MISSION,
-                                            params[0], params[1], params[2], params[3], params[4], params[5], 0,
-                                            true,
-                                            false,
-                                            missionItemParent);
-        items.append(item);
+        if (spinnerId >= 1 && spinnerId <= 6) {
+            params[spinnerId - 1] = val;
+        }
+        
+        items.append(new MissionItem(seqNum++,
+                                     MAV_CMD_DO_SET_ACTUATOR,
+                                     MAV_FRAME_MISSION,
+                                     params[0],
+                                     params[1],
+                                     params[2],
+                                     params[3],
+                                     params[4],
+                                     params[5],
+                                     0,
+                                     true,
+                                     false,
+                                     missionItemParent));
     }
 }
 
@@ -368,15 +319,10 @@ void AgroComplexItem::_saveCommon(QJsonObject& saveObject)
     saveObject[_jsonSprayEnabledKey] =                          _sprayEnabledFact.rawValue().toBool();
     saveObject[_jsonPumpActuatorIdKey] =                        _pumpActuatorIdFact.rawValue().toInt();
     saveObject[_jsonSpinnerActuatorIdKey] =                     _spinnerActuatorIdFact.rawValue().toInt();
-    saveObject[_jsonPumpFixedValueKey] =                        _pumpFixedValueFact.rawValue().toDouble();
     saveObject[_jsonPumpRateKey] =                              _pumpRateFact.rawValue().toDouble();
     saveObject[_jsonSpinnerPWMKey] =                            _spinnerPWMFact.rawValue().toDouble();
     saveObject[_jsonMinPumpKey] =                               _minPumpFact.rawValue().toDouble();
     saveObject[_jsonMinSpeedKey] =                              _minSpeedFact.rawValue().toDouble();
-    saveObject[_jsonCalcModeEnabledKey] =                       _calcModeEnabledFact.rawValue().toBool();
-    saveObject[_jsonTargetRateKey] =                            _targetRateFact.rawValue().toDouble();
-    saveObject[_jsonFlowRateMaxKey] =                           _flowRateMaxFact.rawValue().toDouble();
-    saveObject[_jsonSwathWidthKey] =                            _swathWidthFact.rawValue().toDouble();
 
     // Saving the flag
     saveObject[_jsonIsExclusionZoneKey] =                       _isExclusionZoneFact.rawValue().toBool();
@@ -456,15 +402,10 @@ bool AgroComplexItem::_loadV4V5(const QJsonObject& complexObject, int sequenceNu
         { _jsonSprayEnabledKey,                         QJsonValue::Bool,   false },
         { _jsonPumpActuatorIdKey,                       QJsonValue::Double, false },
         { _jsonSpinnerActuatorIdKey,                    QJsonValue::Double, false },
-        { _jsonPumpFixedValueKey,                       QJsonValue::Double, false },
         { _jsonPumpRateKey,                             QJsonValue::Double, false },
         { _jsonSpinnerPWMKey,                           QJsonValue::Double, false },
         { _jsonMinPumpKey,                              QJsonValue::Double, false },
         { _jsonMinSpeedKey,                             QJsonValue::Double, false },
-        { _jsonCalcModeEnabledKey,                      QJsonValue::Bool,   false },
-        { _jsonTargetRateKey,                           QJsonValue::Double, false },
-        { _jsonFlowRateMaxKey,                          QJsonValue::Double, false },
-        { _jsonSwathWidthKey,                           QJsonValue::Double, false },
 
     };
 
@@ -520,9 +461,6 @@ bool AgroComplexItem::_loadV4V5(const QJsonObject& complexObject, int sequenceNu
     if (complexObject.contains(_jsonSpinnerActuatorIdKey)) {
         _spinnerActuatorIdFact.setRawValue(complexObject[_jsonSpinnerActuatorIdKey].toInt());
     }
-    if (complexObject.contains(_jsonPumpFixedValueKey)) {
-        _pumpFixedValueFact.setRawValue(complexObject[_jsonPumpFixedValueKey].toDouble());
-    }
     if (complexObject.contains(_jsonPumpRateKey)) {
         _pumpRateFact.setRawValue(complexObject[_jsonPumpRateKey].toDouble());
     }
@@ -534,18 +472,6 @@ bool AgroComplexItem::_loadV4V5(const QJsonObject& complexObject, int sequenceNu
     }
     if (complexObject.contains(_jsonMinSpeedKey)) {
         _minSpeedFact.setRawValue(complexObject[_jsonMinSpeedKey].toDouble());
-    }
-    if (complexObject.contains(_jsonCalcModeEnabledKey)) {
-        _calcModeEnabledFact.setRawValue(complexObject[_jsonCalcModeEnabledKey].toBool());
-    }
-    if (complexObject.contains(_jsonTargetRateKey)) {
-        _targetRateFact.setRawValue(complexObject[_jsonTargetRateKey].toDouble());
-    }
-    if (complexObject.contains(_jsonFlowRateMaxKey)) {
-        _flowRateMaxFact.setRawValue(complexObject[_jsonFlowRateMaxKey].toDouble());
-    }
-    if (complexObject.contains(_jsonSwathWidthKey)) {
-        _swathWidthFact.setRawValue(complexObject[_jsonSwathWidthKey].toDouble());
     }
     _entryPoint = complexObject[_jsonEntryPointKey].toInt();
 
@@ -1192,12 +1118,7 @@ void AgroComplexItem::_rebuildTransectsPhase1WorkerSinglePolygon(bool refly)
 
 QList<QPolygonF> AgroComplexItem::_calculateAllowedPolygons(const QPolygonF& mainPoly, const QList<QPolygonF>& rawExclusionPolys)
 {
-    double swathWidth = _swathWidthFact.rawValue().toDouble();
-    if (swathWidth < 0.1) {
-        swathWidth = 0.1;
-    }
-    
-    double sprayMargin = swathWidth / 2.0;
+    const double sprayMargin = 2.5; 
 
     ClipperLib::Clipper clipper;
 

@@ -39,15 +39,10 @@ public:
     Q_PROPERTY(Fact*            sprayEnabled           READ sprayEnabled           CONSTANT)
     Q_PROPERTY(Fact*            pumpActuatorId         READ pumpActuatorId         CONSTANT)
     Q_PROPERTY(Fact*            spinnerActuatorId      READ spinnerActuatorId      CONSTANT)
-    Q_PROPERTY(Fact*            pumpFixedValue         READ pumpFixedValue         CONSTANT)
     Q_PROPERTY(Fact*            pumpRate               READ pumpRate               CONSTANT)
     Q_PROPERTY(Fact*            spinnerPWM             READ spinnerPWM             CONSTANT)
     Q_PROPERTY(Fact*            minPump                READ minPump                CONSTANT)
     Q_PROPERTY(Fact*            minSpeed               READ minSpeed               CONSTANT)
-    Q_PROPERTY(Fact*            calcModeEnabled        READ calcModeEnabled        CONSTANT)
-    Q_PROPERTY(Fact*            targetRate             READ targetRate             CONSTANT)
-    Q_PROPERTY(Fact*            flowRateMax            READ flowRateMax            CONSTANT)
-    Q_PROPERTY(Fact*            swathWidth             READ swathWidth             CONSTANT)
 
     Fact* gridAngle             (void) { return &_gridAngleFact; }
     Fact* flyAlternateTransects (void) { return &_flyAlternateTransectsFact; }
@@ -57,17 +52,13 @@ public:
     Fact* sprayEnabled          (void) { return &_sprayEnabledFact; }
     Fact* pumpActuatorId        (void) { return &_pumpActuatorIdFact; }
     Fact* spinnerActuatorId     (void) { return &_spinnerActuatorIdFact; }
-    Fact* pumpFixedValue        (void) { return &_pumpFixedValueFact; }
     Fact* pumpRate              (void) { return &_pumpRateFact; }
     Fact* spinnerPWM            (void) { return &_spinnerPWMFact; }
     Fact* minPump               (void) { return &_minPumpFact; }
     Fact* minSpeed              (void) { return &_minSpeedFact; }
-    Fact* calcModeEnabled       (void) { return &_calcModeEnabledFact; }
-    Fact* targetRate            (void) { return &_targetRateFact; }
-    Fact* flowRateMax           (void) { return &_flowRateMaxFact; }
-    Fact* swathWidth            (void) { return &_swathWidthFact; }
 
     Q_INVOKABLE void rotateEntryPoint(void);
+    Q_INVOKABLE void sendAdvancedParametersToVehicle();
 
     // Overrides from ComplexMissionItem
     QString         patternName         (void) const final { return name; }
@@ -138,7 +129,6 @@ private slots:
     void _rebuildTransectsPhase1        (void) final;
     void _recalcCameraShots             (void) final;
 
-    void _recalcSpeedFromRate           (void);
     void _queueRebuildTransects();
 
 protected:
@@ -241,16 +231,11 @@ private:
     SettingsFact    _sprayEnabledFact;
     SettingsFact    _pumpActuatorIdFact;
     SettingsFact    _spinnerActuatorIdFact;
-    SettingsFact    _pumpFixedValueFact;
+    SettingsFact    _isExclusionZoneFact;
     SettingsFact    _pumpRateFact;
     SettingsFact    _spinnerPWMFact;
     SettingsFact    _minPumpFact;
     SettingsFact    _minSpeedFact;
-    SettingsFact    _calcModeEnabledFact;
-    SettingsFact    _targetRateFact;
-    SettingsFact    _flowRateMaxFact;
-    SettingsFact    _swathWidthFact;
-    SettingsFact    _isExclusionZoneFact;
     int             _entryPoint;
 
     static constexpr const char* _jsonGridAngleKey =          "angle";
@@ -288,13 +273,8 @@ private:
     static constexpr const char* _jsonSprayEnabledKey =                   "sprayEnabled";
     static constexpr const char* _jsonPumpActuatorIdKey =                 "pumpActuatorId";
     static constexpr const char* _jsonSpinnerActuatorIdKey =              "spinnerActuatorId";
-    static constexpr const char* _jsonPumpFixedValueKey =                 "pumpFixedValue";
     static constexpr const char* _jsonPumpRateKey =                       "pumpRate";
     static constexpr const char* _jsonSpinnerPWMKey =                     "spinnerPWM";
     static constexpr const char* _jsonMinPumpKey =                        "minPump";
     static constexpr const char* _jsonMinSpeedKey =                       "minSpeed";
-    static constexpr const char* _jsonCalcModeEnabledKey =                "calcModeEnabled";
-    static constexpr const char* _jsonTargetRateKey =                     "targetRate";
-    static constexpr const char* _jsonFlowRateMaxKey =                    "flowRateMax";
-    static constexpr const char* _jsonSwathWidthKey =                     "swathWidth";
 };

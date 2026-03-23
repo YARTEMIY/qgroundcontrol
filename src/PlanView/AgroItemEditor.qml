@@ -66,76 +66,13 @@ TransectStyleComplexItemEditor {
                 Layout.bottomMargin:    _margin
             }
 
-            QGCLabel {
-                text:                   qsTr("Application Rate Control");
-                font.bold:              true;
-                Layout.columnSpan:      2
-                Layout.fillWidth:       true
-                wrapMode:               Text.WordWrap 
-            }
-            FactCheckBox {
-                id:                     calcModeCheck
-                text:                   qsTr("Auto-Calculate Speed")
-                fact:                   missionItem.calcModeEnabled
-                Layout.columnSpan:      2
-                Layout.fillWidth:       true
-            }
-
-            QGCLabel {
-                text:                   qsTr("Target Rate (L/ha)")
-                visible:                calcModeCheck.checked
-            }
-            FactTextField {
-                fact:                   missionItem.targetRate
-                Layout.fillWidth:       true
-                Layout.minimumWidth:    40
-                visible:                calcModeCheck.checked
-            }
-
-            QGCSlider {
-                from:                   1
-                to:                     100
-                stepSize:               1
-                value:                  missionItem.targetRate.value
-                onValueChanged:         missionItem.targetRate.value = value
-                Layout.columnSpan:      2
-                Layout.fillWidth:       true
-                visible:                calcModeCheck.checked
-                live:                   true
-            }
-
-            QGCLabel {
-                text:                   qsTr("Swath Width (m)")
-                visible:                calcModeCheck.checked
-            }
-            FactTextField {
-                fact:                   missionItem.swathWidth
-                Layout.fillWidth:       true
-                Layout.minimumWidth:    40
-                visible:                calcModeCheck.checked
-            }
-
-            QGCLabel {
-                text:                   qsTr("Max Flow (L/min)")
-                visible:                calcModeCheck.checked
-            }
-            FactTextField {
-                fact:                   missionItem.flowRateMax
-                Layout.fillWidth:       true
-                Layout.minimumWidth:    40
-                visible:                calcModeCheck.checked
-            }
-
-            QGCLabel {
-                text:                   qsTr("Flight Speed")
-            }
+            // --- Flight Speed ---
+            QGCLabel { text: qsTr("Flight Speed") }
             FactTextField {
                 fact:                   missionItem.vehicleSpeed
                 Layout.fillWidth:       true
                 Layout.minimumWidth:    40
                 unitsLabel:             "m/s"
-                enabled:                !calcModeCheck.checked
-                readOnly:               calcModeCheck.checked
             }
 
             Rectangle {
@@ -148,95 +85,98 @@ TransectStyleComplexItemEditor {
                 Layout.bottomMargin:    _margin
             }
 
-            QGCCheckBox {
-                id:                     showAdvanced
-                text:                   qsTr("Show Advanced Setup")
-                checked:                false
-                Layout.columnSpan:      2
-                Layout.fillWidth:       true
+            // --- Sprayer Settings ---
+            property bool isArduPilot: _vehicle ? _vehicle.firmwareType === MAVLink.MAV_AUTOPILOT_ARDUPILOTMEGA : true
+            property bool isPX4:       _vehicle ? _vehicle.firmwareType === MAVLink.MAV_AUTOPILOT_PX4 : false
+
+            Rectangle {
+                Layout.columnSpan:      2; Layout.fillWidth: true; height: 1
+                color:                  QGroundControl.globalPalette.text; opacity: 0.5
+                Layout.topMargin:       _margin; Layout.bottomMargin:    _margin
             }
 
-            ColumnLayout {
+            QGCLabel {
+                text:                   qsTr("Sprayer Settings");
+                font.bold:              true;
                 Layout.columnSpan:      2
-                Layout.fillWidth:       true
-                visible:                showAdvanced.checked
+            }
 
-                FactCheckBox {
-                    text:               qsTr("Enable Sprayer");
-                    fact:               missionItem.sprayEnabled
-                }
+            FactCheckBox {
+                text:                   qsTr("Enable Sprayer Path");
+                fact:                   missionItem.sprayEnabled
+                Layout.columnSpan:      2
+            }
 
-                GridLayout {
-                    columns:            2
-                    Layout.fillWidth:   true
+            // --- ПОЛЯ ID ПРИВОДОВ (PINS) ---
+            
+            // Pump ID (виден всегда: для PX4 это номер актуатора, для Ardu это номер пина)
+            QGCLabel { text: qsTr("Pump ID / Pin") }
+            FactTextField { 
+                fact:               missionItem.pumpActuatorId
+                Layout.fillWidth:   true 
+            }
 
-                    QGCLabel {
-                        text:           qsTr("Pump ID")
-                    }
-                    FactTextField {
-                        fact:           missionItem.pumpActuatorId;
-                        Layout.fillWidth: true
-                        Layout.minimumWidth: 40
-                    }
+            // Spinner ID (виден только для ArduPilot)
+            QGCLabel { 
+                text:               qsTr("Spinner ID / Pin")
+                visible:            isArduPilot 
+            }
+            FactTextField { 
+                fact:               missionItem.spinnerActuatorId
+                Layout.fillWidth:   true
+                visible:            isArduPilot 
+            }
 
-                    QGCLabel {
-                        text:           qsTr("Spinner ID")
-                    }
-                    FactTextField {
-                        fact:           missionItem.spinnerActuatorId;
-                        Layout.fillWidth: true
-                        Layout.minimumWidth: 40
-                    }
+            // --- РАСШИРЕННЫЕ ПАРАМЕТРЫ (Только для ArduPilot) ---
+            
+            QGCLabel { 
+                text:               qsTr("Pump Rate (%)")
+                visible:            isArduPilot 
+            }
+            FactTextField { 
+                fact:               missionItem.pumpRate
+                Layout.fillWidth:   true
+                visible:            isArduPilot 
+            }
 
-                    QGCLabel {
-                        text:           "Manual Logic:";
-                        font.bold:      true;
-                        Layout.fillWidth: true
-                        Layout.columnSpan: 2;
-                        visible:        !calcModeCheck.checked
-                    }
+            QGCLabel { 
+                text:               qsTr("Spinner PWM")
+                visible:            isArduPilot 
+            }
+            FactTextField { 
+                fact:               missionItem.spinnerPWM
+                Layout.fillWidth:   true
+                visible:            isArduPilot 
+            }
 
-                    QGCLabel {
-                        text:           qsTr("Pump Fixed Val");
-                        visible:        !calcModeCheck.checked
-                    }
-                    FactTextField {
-                        fact:           missionItem.pumpFixedValue;
-                        Layout.fillWidth: true;
-                        Layout.minimumWidth: 40
-                        visible:        !calcModeCheck.checked
-                    }
+            QGCLabel { 
+                text:               qsTr("Min Speed (cm/s)")
+                visible:            isArduPilot 
+            }
+            FactTextField { 
+                fact:               missionItem.minSpeed
+                Layout.fillWidth:   true
+                visible:            isArduPilot 
+            }
 
-                    QGCLabel {
-                        text:           qsTr("Pump Rate %");
-                        visible:        !calcModeCheck.checked
-                    }
-                    FactTextField {
-                        fact:           missionItem.pumpRate;
-                        Layout.fillWidth: true;
-                        Layout.minimumWidth: 40
-                        visible:        !calcModeCheck.checked
-                    }
-
-                    QGCLabel {
-                        text:           qsTr("Spinner Speed");
-                        visible:        !calcModeCheck.checked
-                    }
-                    FactTextField {
-                        fact:           missionItem.spinnerPWM;
-                        Layout.fillWidth: true;
-                        Layout.minimumWidth: 40
-                        visible:        !calcModeCheck.checked
-                    }
-                }
+            QGCLabel { 
+                text:               qsTr("Min Pump (%)")
+                visible:            isArduPilot 
+            }
+            FactTextField { 
+                fact:               missionItem.minPump
+                Layout.fillWidth:   true
+                visible:            isArduPilot 
             }
 
             Rectangle {
-                Layout.columnSpan:  2
-                Layout.fillWidth:   true
-                height:             1
-                color:              QGroundControl.globalPalette.text
-                opacity:            0.2
+                Layout.columnSpan:      2;
+                Layout.fillWidth:       true;
+                height:                 1
+                color:                  QGroundControl.globalPalette.text;
+                opacity:                0.5
+                Layout.topMargin:       _margin;
+                Layout.bottomMargin:    _margin
             }
 
             QGCLabel {
