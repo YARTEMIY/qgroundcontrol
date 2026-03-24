@@ -64,6 +64,14 @@
     "default":          2
 },
 {
+    "name": "ActuatorId",
+    "shortDesc": "Actuator ID for Sprayer (PX4).",
+    "type": "int32",
+    "min": 1,
+    "max": 6,
+    "default": 1
+},
+{
     "name": "PumpRate",
     "shortDesc": "Pump speed (%).",
     "type": "double",

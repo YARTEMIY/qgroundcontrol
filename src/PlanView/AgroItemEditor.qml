@@ -22,6 +22,10 @@ TransectStyleComplexItemEditor {
     property real   _margin:        ScreenTools.defaultFontPixelWidth / 2
     property var    _missionItem:   missionItem
 
+    property var ctrlVehicle: missionItem.masterController.controllerVehicle
+    property bool isArduPilot: ctrlVehicle ? ctrlVehicle.apmFirmware : true
+    property bool isPX4:       ctrlVehicle ? ctrlVehicle.px4Firmware : false
+
     Component {
         id: _transectValuesComponent
 
@@ -86,92 +90,83 @@ TransectStyleComplexItemEditor {
             }
 
             // --- Sprayer Settings ---
-            Rectangle {
-                Layout.columnSpan:      2; Layout.fillWidth: true; height: 1
-                color:                  QGroundControl.globalPalette.text; opacity: 0.5
-                Layout.topMargin:       _margin; Layout.bottomMargin:    _margin
-            }
-
             QGCLabel {
-                text:                   missionItem.isArduPilot ? qsTr("Sprayer (ArduPilot Settings)") : qsTr("Sprayer (PX4 Settings)")
-                font.bold:              true;
-                Layout.columnSpan:      2
+                text: isPX4 ? qsTr("Sprayer") : qsTr("Sprayer")
+                font.bold: true
             }
 
             FactCheckBox {
-                text:                   qsTr("Enable Sprayer");
-                fact:                   missionItem.sprayEnabled
-                Layout.columnSpan:      2
+                text: qsTr("Enable")
+                fact: missionItem.sprayEnabled
             }
 
+            // --- BLOCK FOR PX4 ---
             QGCLabel { 
-                text:       qsTr("Pump Actuator ID")
-                visible:    missionItem.isPX4 
+                text:               qsTr("Actuator ID")
+                visible:            isPX4 
             }
             FactTextField { 
-                fact:       missionItem.pumpActuatorId
-                Layout.fillWidth: true
-                visible:    missionItem.isPX4
+                fact:               missionItem.actuatorId
+                Layout.fillWidth:   true
+                visible:            isPX4 
             }
 
+            // --- BLOCK FOR ARDUPILOT ---
             QGCLabel {
                 text: qsTr("Pump Pin ID");
-                visible: missionItem.isArduPilot
+                visible: isArduPilot
             }
             FactTextField {
                 fact: missionItem.pumpActuatorId;
-                Layout.fillWidth: true;
-                visible: missionItem.isArduPilot
+                Layout.fillWidth: true; visible: isArduPilot
             }
 
             QGCLabel {
                 text: qsTr("Spinner Pin ID");
-                visible: missionItem.isArduPilot
+                visible: isArduPilot
             }
             FactTextField {
                 fact: missionItem.spinnerActuatorId;
-                Layout.fillWidth: true;
-                visible: missionItem.isArduPilot
+                Layout.fillWidth: true; visible: isArduPilot
             }
 
             QGCLabel {
                 text: qsTr("Pump Rate (%)");
-                visible: missionItem.isArduPilot
+                visible: isArduPilot
             }
             FactTextField {
                 fact: missionItem.pumpRate;
-                Layout.fillWidth: true;
-                visible: missionItem.isArduPilot
+                Layout.fillWidth: true; visible: isArduPilot
             }
 
             QGCLabel {
                 text: qsTr("Spinner PWM");
-                visible: missionItem.isArduPilot
+                visible: isArduPilot
             }
             FactTextField {
                 fact: missionItem.spinnerPWM;
                 Layout.fillWidth: true;
-                visible: missionItem.isArduPilot
+                visible: isArduPilot
             }
 
             QGCLabel {
                 text: qsTr("Min Speed (cm/s)");
-                visible: missionItem.isArduPilot
+                visible: isArduPilot
             }
             FactTextField {
                 fact: missionItem.minSpeed;
                 Layout.fillWidth: true;
-                visible: missionItem.isArduPilot
+                visible: isArduPilot
             }
 
             QGCLabel {
                 text: qsTr("Min Pump (%)");
-                visible: missionItem.isArduPilot
+                visible: isArduPilot
             }
             FactTextField {
                 fact: missionItem.minPump;
                 Layout.fillWidth: true;
-                visible: missionItem.isArduPilot
+                visible: isArduPilot
             }
 
             Rectangle {
